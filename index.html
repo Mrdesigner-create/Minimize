@@ -3,10 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Divided Sheets with Dynamic Sizing and Interactivity</title>
+  <title>Divided Sheets with Dynamic Sizing and Interactivity (MAX Quality Screen/Print)</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script>
+    // Set the worker URL for PDF.js - required.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    // *** MAX QUALITY UPGRADE (Unified Scale) ***
+    // This single constant is now used for ALL PDF rendering (screen and print)
+    // to ensure max quality is always visible. (4.0 is print-ready.)
+    const PDF_PRINT_QUALITY_SCALE = 4.0; 
+  </script>
 
   <style>
-    /* ---------- Styles ---------- */
+    /* ---------- Styles (kept from your file + a few tiny adjustments) ---------- */
     :root { 
         --paper-padding-mm: 10; 
         --toggle-controls-bg: red;    
@@ -15,7 +26,6 @@
     }
 
     body {
-      /* Background Image */
       background: url('https://mrdesigner-create.github.io/photoes/Beautiful-Rose.jpg') center/cover no-repeat fixed !important;
       padding: 20px;
       font-family: Arial, sans-serif;
@@ -25,21 +35,13 @@
     }
     body.bg-gradient { background: linear-gradient(to bottom right, skyblue, #ff4b4b) !important; }
 
-    /* Page Wrapper (Aligned to Left) */
-    #page-wrapper { 
-        display:flex; 
-        flex-direction:column; 
-        align-items:flex-start; 
-        width:100%; 
-    }
+    #page-wrapper { display:flex; flex-direction:column; align-items:flex-start; width:100%; }
 
-    /* Paper Sizes */
     .a4-page { width:210mm; min-height:297mm; }
     .a5-page { width:148mm; min-height:210mm; }
     .a6-page { width:105mm; min-height:148mm; }
     .us-letter-page { width:8.5in; min-height:11in; }
 
-    /* Paper Appearance */
     .paper {
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       background:#fff;
@@ -50,20 +52,13 @@
     }
     .a4-page.hidden, .a5-page.hidden, .a6-page.hidden, .us-letter-page.hidden { display:none !important; }
 
-    /* Grid Container (Holds the divisions) */
-    .grid-container {
-        display: grid;
-        width: 100%;
-        height: 100%;
-    }
-    
-    /* Box Styles */
+    .grid-container { display: grid; width: 100%; height: 100%; }
+
     .box {
       border: 1px dashed #ccc; 
       display: flex; 
       justify-content: center; 
       align-items: center;
-      /* background-color: #f7f7f7; <-- REMOVED: Managed by empty-state/filled-state classes */
       font-size: 10px;
       color: #999;
       box-sizing: border-box;
@@ -74,36 +69,23 @@
       background-size: cover; 
       background-position: center; 
       background-repeat: no-repeat;
-      /* Ensure that custom pixel sizes can override grid's column/row dimensions */
       min-width: 0;
       min-height: 0;
+      position: relative;
     }
-    .box:hover {
-        border-color: #3498db;
-    }
-    
-    /* Image inside the box */
-    .box img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover; 
-        display: block;
-    }
+    .box:hover { border-color: #3498db; }
+    /* Ensure image and canvas are contained within the box and display block */
+    .box img, .box canvas { width: 100%; height: 100%; object-fit: contain; display: block; margin: auto; }
+    .box canvas { max-width: 100%; max-height: 100%; display: block; }
 
-    /* ------------------------------------- */
-    /* --- NEW: Alternating Box Colors --- */
-    /* ------------------------------------- */
-    
     /* Alternating Empty Box Colors */
-    .box.empty-state.color-a { background-color: #f0f8ff !important; } /* Alice Blue */
-    .box.empty-state.color-b { background-color: #fff8e1 !important; } /* Very Light Yellow */
-    .box.empty-state.color-c { background-color: #e1f3e8 !important; } /* Very Light Green */
-    .box.empty-state.color-d { background-color: #fbebf7 !important; } /* Very Light Pink */
-    
-    /* Filled Box Color (Used when a file is placed) */
+    .box.empty-state.color-a { background-color: #f0f8ff !important; } 
+    .box.empty-state.color-b { background-color: #fff8e1 !important; } 
+    .box.empty-state.color-c { background-color: #e1f3e8 !important; } 
+    .box.empty-state.color-d { background-color: #fbebf7 !important; } 
+
     .box.filled-state { background-color: #e8f5e9 !important; } 
 
-    /* Control Panel */
     .controls { padding:10px; background:red; border:1px solid #95a5a6; z-index:10000; max-width:360px;
       text-align:center; max-height:80vh; overflow-y:auto; overflow-x:hidden;
       box-shadow: 5px 5px 15px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.8);
@@ -111,36 +93,21 @@
     .controls-panel-container { position:fixed; top:20px; right:20px; transition:right 1.10s; }
     .controls-panel-container.hidden { right:-382px; }
 
-    #toggle-controls-btn { 
-      position:absolute; top:0; left:-54px; height:68px; width:59px;
-      border:1px solid var(--toggle-controls-border); 
-      border-right:10px; 
-      background:var(--toggle-controls-bg); 
-      color: var(--toggle-controls-icon-color); 
-      display:flex; align-items:center; justify-content:center;
-      border-radius:22px 0 0 20px; cursor:pointer; box-shadow:-10px 0 8px rgba(0,0,0,0.1);
-      font-size: 24px; 
-    }
+    #toggle-controls-btn { position:absolute; top:0; left:-54px; height:68px; width:59px; border:1px solid var(--toggle-controls-border); border-right:10px; background:var(--toggle-controls-bg); color: var(--toggle-controls-icon-color); display:flex; align-items:center; justify-content:center; border-radius:22px 0 0 20px; cursor:pointer; box-shadow:-10px 0 8px rgba(0,0,0,0.1); font-size: 24px; }
 
     #toggle-bg-btn { position:fixed; top:20px; left:20px; background:yellow; border:1px solid red; box-shadow: 0 8px 8px rgba(0,0,0,0.3); padding:8px 8px; cursor:pointer; z-index:10001; }
 
-    .controls button, .controls select, .controls input[type="number"] {
-      padding:10px 12px; margin:6px 0; border:1px solid lightgray; font-size:14px; width:100%; box-sizing:border-box;
-      background-color: white; 
-    }
+    .controls button, .controls select, .controls input[type="number"] { padding:10px 12px; margin:6px 0; border:1px solid lightgray; font-size:14px; width:100%; box-sizing:border-box; background-color: white; }
     .controls h4 { margin:10px 0 6px; }
     .hidden-input { display:none; }
     .input-group { display: flex; gap: 5px; }
     .input-group input { width: 50%; }
     .input-group-four { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-    
-    /* UPDATED: Radio Button Group */
+
     .input-group-radio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; background: #fff; padding: 5px; border-radius: 4px; }
     .input-group-radio label { display: flex; align-items: center; justify-content: center; padding: 4px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 10px; cursor: pointer; }
     .input-group-radio input[type="radio"] { margin-right: 2px; width: auto; }
-    .input-group-radio input[type="radio"]:checked + span { font-weight: bold; color: green; }
 
-    /* Context Menu Styles */
     #context-menu {
         position: fixed;
         background: #fff;
@@ -153,121 +120,28 @@
         display: none;
         min-width: 150px;
     }
-    #context-menu li {
-        padding: 8px 12px;
-        cursor: pointer;
-        font-size: 14px;
-    }
-    #context-menu li:hover {
-        background: #f0f0f0;
-    }
-    
-    /* --- New Modal Styles for Editing View (Professional Look) --- */
-    #edit-modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.8); /* Darker overlay */
-        display: none; /* Hidden by default */
-        justify-content: center;
-        align-items: center;
-        z-index: 10003;
-    }
+    #context-menu li { padding: 8px 12px; cursor: pointer; font-size: 14px; }
+    #context-menu li:hover { background: #f0f0f0; }
 
-    .modal-content {
-        background: #333; /* Dark background for professional feel */
-        color: #fff;
-        padding: 25px;
-        border-radius: 12px;
-        width: 95%;
-        max-width: 900px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
-        max-height: 90vh;
-        overflow-y: auto;
-        transform: scale(0.95);
-        transition: transform 0.3s ease-out;
-    }
-    #edit-modal.active .modal-content {
-        transform: scale(1);
-    }
-    
-    .modal-content h3 {
-        margin-top: 0;
-        border-bottom: 2px solid #555;
-        padding-bottom: 10px;
-        color: #f39c12; /* Accent color */
-    }
-    
-    .modal-main-area {
-        display: flex;
-        gap: 20px;
-    }
-    
-    .modal-preview-container {
-        flex: 3;
-        min-width: 60%;
-    }
-    
-    .modal-sidebar {
-        flex: 1;
-        min-width: 25%;
-        background: #444;
-        padding: 15px;
-        border-radius: 6px;
-    }
-
-    /* Modal Inputs */
+    #edit-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 10003; }
+    .modal-content { background: #333; color: #fff; padding: 25px; border-radius: 12px; width: 95%; max-width: 900px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6); max-height: 90vh; overflow-y: auto; transform: scale(0.95); transition: transform 0.3s ease-out; }
+    #edit-modal.active .modal-content { transform: scale(1); }
+    .modal-content h3 { margin-top: 0; border-bottom: 2px solid #555; padding-bottom: 10px; color: #f39c12; }
+    .modal-main-area { display: flex; gap: 20px; }
+    .modal-preview-container { flex: 3; min-width: 60%; }
+    .modal-sidebar { flex: 1; min-width: 25%; background: #444; padding: 15px; border-radius: 6px; }
     .modal-sidebar label { display: block; margin-top: 10px; margin-bottom: 5px; font-weight: bold; font-size: 0.9em; color: #ccc;}
     .modal-sidebar input[type="number"] { padding: 8px; width: 100%; box-sizing: border-box; border: 1px solid #666; background: #222; color: #fff; border-radius: 4px; }
-    
-    #modal-preview {
-        border: 2px solid #666;
-        min-height: 400px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-bottom: 15px;
-        background-color: #222;
-        overflow: hidden;
-        border-radius: 4px;
-        /* Image adjustments will be applied here using the CSS filter property */
-    }
-    #modal-preview img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-    }
-    
-    .modal-actions button {
-        margin: 5px 0;
-        padding: 10px 15px;
-        font-size: 15px;
-        cursor: pointer;
-        width: 100%;
-        border: none;
-        border-radius: 4px;
-        color: #fff;
-        transition: background-color 0.2s;
-    }
-    
-    /* Specific Button Styles */
-    .modal-actions .btn-primary { background-color: #3498db; }
-    .modal-actions .btn-primary:hover { background-color: #2980b9; }
-    .modal-actions .btn-replace { background-color: #2ecc71; }
-    .modal-actions .btn-replace:hover { background-color: #27ae60; }
-    .modal-actions .btn-crop { background-color: #e67e22; }
-    .modal-actions .btn-crop:hover { background-color: #d35400; }
-    .modal-actions .btn-delete { background-color: #e74c3c; }
-    .modal-actions .btn-delete:hover { background-color: #c0392b; }
-    .modal-actions .btn-close { background-color: #555; margin-top: 15px;}
-    .modal-actions .btn-close:hover { background-color: #777; }
-    
-    /* New Button Styles */
-    .modal-actions .btn-adjust { background-color: #f39c12; }
-    .modal-actions .btn-adjust:hover { background-color: #e8a245; }
+    #modal-preview { border: 2px solid #666; min-height: 400px; display: flex; justify-content: center; align-items: center; margin-bottom: 15px; background-color: #222; overflow: hidden; border-radius: 4px; }
+    #modal-preview img, #modal-preview canvas { max-width: 100%; max-height: 100%; object-fit: contain; display:block; }
 
+    .modal-actions button { margin: 5px 0; padding: 10px 15px; font-size: 15px; cursor: pointer; width: 100%; border: none; border-radius: 4px; color: #fff; transition: background-color 0.2s; }
+    .modal-actions .btn-primary { background-color: #3498db; }
+    .modal-actions .btn-replace { background-color: #2ecc71; }
+    .modal-actions .btn-crop { background-color: #e67e22; }
+    .modal-actions .btn-delete { background-color: #e74c3c; }
+    .modal-actions .btn-close { background-color: #555; margin-top: 15px;}
+    .modal-actions .btn-adjust { background-color: #f39c12; }
 
     @media print {
       .controls-panel-container, #toggle-controls-btn, #toggle-bg-btn, #togglePaperBtn, #add-page-btn, #context-menu, #edit-modal { display:none; }
@@ -275,45 +149,22 @@
       .paper { width:auto !important; min-height:auto !important; margin:0; padding:0; box-shadow:none; page-break-after:always; }
       .box { border: none !important; background-color: white !important; }
       .box span { display: none; } 
-      
+      .box canvas { width: 100%; height: 100%; display: block; } /* The high-res canvas created by renderFileInBox is used here */
       @page { margin:0; }
     }
-    
-    /* Unique Button Styles */
-    #togglePaperBtn { background-color: yellow !important; color: black !important; border-color: black !important; font-weight: bold !important; border-width: 2px !important; } /* Yellow */
-    #paper-size-select { background-color: purple !important; color: white !important; border-color: yellow !important; font-weight: bold !important; border-width: 2px !important; -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; } /* Purple/Brinjal */
-    #print-btn { background-color: crimson !important; color: white !important; border-color: #3498db !important; font-weight: bold !important; border-width: 2px !important; } /* Crimson */
-    
-    /* --- CUSTOM COLORS FOR OTHER BUTTONS/INPUTS --- */
-    #add-page-btn { background-color: orangered !important; color: white !important; border-color: #333 !important; font-weight: bold !important; border-width: 2px !important; } /* OrangeRed */
-    #multi-upload-btn { background-color: deepskyblue !important; color: white !important; border-color: navy !important; font-weight: bold !important; border-width: 2px !important; } /* DeepSkyBlue */
-    #single-upload-btn { background-color: hotpink !important; color: white !important; border-color: darkred !important; font-weight: bold !important; border-width: 2px !important; } /* HotPink */
 
-    /* Number Input Fields (Margins, Size, Gaps) */
-    .controls input[type="number"] { 
-        background-color: LightCyan !important; 
-        color: #333 !important;
-        border: 2px solid DarkCyan !important;
-    }
+    /* Button colors */
+    #togglePaperBtn { background-color: yellow !important; color: black !important; border-color: black !important; font-weight: bold !important; border-width: 2px !important; }
+    #paper-size-select { background-color: purple !important; color: white !important; border-color: yellow !important; font-weight: bold !important; border-width: 2px !important; -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; }
+    #print-btn { background-color: crimson !important; color: white !important; border-color: #3498db !important; font-weight: bold !important; border-width: 2px !important; }
+    #add-page-btn { background-color: orangered !important; color: white !important; border-color: #333 !important; font-weight: bold !important; border-width: 2px !important; }
+    #multi-upload-btn { background-color: deepskyblue !important; color: white !important; border-color: navy !important; font-weight: bold !important; border-width: 2px !important; }
 
-    /* Upload Mode Radio Buttons */
+    .controls input[type="number"] { background-color: LightCyan !important; color: #333 !important; border: 2px solid DarkCyan !important; }
     .input-group-radio { background: #eee !important; border: 1px solid #aaa !important; }
-    .input-group-radio label { 
-        background-color: LightYellow !important; 
-        border-color: #aaa !important; 
-        color: #333 !important; 
-        transition: background-color 0.2s;
-    }
-    .input-group-radio label:hover {
-        background-color: gold !important; 
-    }
-    .input-group-radio input[type="radio"]:checked + span { 
-        font-weight: bold; 
-        color: white !important; 
-        background-color: LimeGreen !important; 
-        border-radius: 4px; 
-        padding: 4px;
-    }
+    .input-group-radio label { background-color: LightYellow !important; border-color: #aaa !important; color: #333 !important; transition: background-color 0.2s; }
+    .input-group-radio label:hover { background-color: gold !important; }
+    .input-group-radio input[type="radio"]:checked + span { font-weight: bold; color: white !important; background-color: LimeGreen !important; border-radius: 4px; padding: 4px; }
   </style>
 </head>
 <body class="bg-image">
@@ -383,9 +234,7 @@
 
         <h4>📤 Upload Documents (PDF/DOC ready):</h4>
         <input id="multi-file-input" class="hidden-input" type="file" accept="image/*, .pdf" multiple>
-        <input id="single-file-input" class="hidden-input" type="file" accept="image/*, .doc,.docx">
         <button id="multi-upload-btn">➕ Choose Files (Images/PDF)</button>
-        <button id="single-upload-btn">➕ Add Single File (Image/DOC/DOCX)</button>
 
         <p style="font-size:.85em; margin-top:10px;">Note: Files are tracked and new pages are created when necessary.</p>
 
@@ -397,9 +246,9 @@
   <div id="page-wrapper"></div>
 
   <ul id="context-menu">
-      <li onclick="handleContextMenuAction('💡 Photo Adjust')">💡 Photo Adjust</li>
-      <li onclick="handleContextMenuAction('🔄 Replace File')">🔄 Replace File</li>
-      <li onclick="handleContextMenuAction('✂️ Crop Option')">✂️ Crop Option</li>
+      <li id="context-adjust" onclick="handleContextMenuAction('💡 Photo Adjust')">💡 Photo Adjust</li>
+      <li id="context-replace" onclick="handleContextMenuAction('🔄 Replace File')">🔄 Replace File</li>
+      <li id="context-crop" onclick="handleContextMenuAction('✂️ Crop Option')">✂️ Crop Option</li>
       <li onclick="deleteFile()">🗑️ Delete File</li>
   </ul>
   
@@ -409,8 +258,14 @@
           
           <div class="modal-main-area">
               <div class="modal-preview-container">
-                  <div id="modal-preview">
-                      </div>
+                  <div id="modal-preview"></div>
+
+                  <div id="pdf-nav-controls" style="display:none; text-align:center; margin-top:8px;">
+                    <button id="pdf-prev-btn">◀ Prev</button>
+                    <span id="pdf-page-indicator" style="margin:0 10px;">Page 1 / 1</span>
+                    <button id="pdf-next-btn">Next ▶</button>
+                  </div>
+
                   <p style="font-size: 0.9em;">
                     **File:** <span id="modal-file-name">N/A</span> 
                     <br>
@@ -430,7 +285,7 @@
                       
                       <button class="btn-adjust" onclick="applyImageAdjustments()">✅ Apply Adjustments</button>
                       <button class="btn-adjust" onclick="resetImageAdjustments()">🔄 Reset</button>
-                      <p style="font-size: 0.7em; margin-top: 5px; color: #aaa;">(Changes applied to preview only. Needs a library for permanent saving.)</p>
+                      <p style="font-size: 0.7em; margin-top: 5px; color: #aaa;">(Only affects images, not PDFs.)</p>
                   </div>
                   
                   <div id="crop-controls" style="display:none;">
@@ -445,9 +300,9 @@
                   </div>
                   
                   <div class="modal-actions">
-                      <button class="btn-primary" onclick="openEditingModal('💡 Photo Adjust')">💡 Photo Adjust</button>
+                      <button class="btn-primary" id="modal-adjust-btn" onclick="openEditingModal('💡 Photo Adjust')">💡 Photo Adjust</button>
                       <button class="btn-replace" onclick="document.getElementById('modal-replace-input').click()">🔄 Replace File</button>
-                      <button class="btn-crop" onclick="openEditingModal('✂️ Crop Option')">✂️ Crop Option</button>
+                      <button class="btn-crop" id="modal-crop-btn" onclick="openEditingModal('✂️ Crop Option')">✂️ Crop Option</button>
                       <button class="btn-delete" onclick="deleteFileFromModal()">🗑️ Delete File</button>
                       
                       <input type="file" id="modal-replace-input" class="hidden-input" accept="image/*, .doc,.docx, .pdf" onchange="handleModalFileReplacement(event)">
@@ -460,151 +315,190 @@
   </div>
 
 <script>
-/* ---------- JS: Core Functions Only ---------- */
+/* ---------- JS: Core Functions ---------- */
 
-const PAPER_SIZES = {
-  'a4': { w:210, h:297 }, 'us-letter': { w:215.9, h:279.4 }, 'a5': { w:148, h:210 }, 'a6': { w:105, h:148 }
-};
+/* ---------- Constants & Globals ---------- */
+const PAPER_SIZES = { 'a4': { w:210, h:297 }, 'us-letter': { w:215.9, h:279.4 }, 'a5': { w:148, h:210 }, 'a6': { w:105, h:148 } };
+const PAGE_TWO_CUSTOM_ORDER_OFFSET = [6,5,8,7];
 
-// 🎯 Custom sequence for Page 2 boxes (5, 6, 7, 8) in the Custom Interleaved mode
-const PAGE_TWO_CUSTOM_ORDER_OFFSET = [6, 5, 8, 7]; 
+let marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0;
+let currentPaperSize = 'a4', currentBoxWidth = 0, currentBoxHeight = 0, currentColGap = 0, currentRowGap = 0;
+let isCustomSize = false;
+let currentLayout = { cols: 2, rows: 2, boxesPerPage: 4 };
+let currentPageIndex = 0, nextDivisionNumber = 1;
+let activeBoxElement = null;
+let uploadMode = 'serial', currentInterleavedFileIndex = 0;
+let boxFileMap = new Map(); // stores either image File OR pdfPageEntry objects
+let currentModalAction = '';
 
-let marginTop = 0; 
-let marginBottom = 0;
-let marginLeft = 0;
-let marginRight = 0;
+// Modal pdf state
+let modalPdfObj = null, modalPdfPageNum = 1, modalPdfTotalPages = 1, modalPdfCurrentBoxId = null;
 
-let currentPaperSize = 'a4'; 
-let currentBoxWidth = 0; 
-let currentBoxHeight = 0; 
-let currentColGap = 0; 
-let currentRowGap = 0; 
+/* ---------- Helper: detect whether an entry is a PDF-page "entry" ---------- */
+function isPdfPageEntry(obj) {
+    return obj && obj.kind === 'pdfpage' && obj.pdf && typeof obj.pageNumber === 'number';
+}
 
-let isCustomSize = false; // 💡 NEW: Flag to track if custom size is applied
-
-let currentLayout = { cols: 2, rows: 2, boxesPerPage: 4 }; // Fixed 2x2 layout (4 boxes per page)
-
-let currentPageIndex = 0;
-let nextDivisionNumber = 1; // Global counter: ID of the next box to be CREATED
-let activeBoxElement = null; // Tracks the box element that opened the context menu/modal
-
-let uploadMode = 'serial'; 
-let currentInterleavedFileIndex = 0; // Tracks the count of files placed in interleaved modes
-let boxFileMap = new Map(); // Global map to store the actual File object for each box ID
-let currentModalAction = ''; // Tracks which action button was clicked to open the modal
-
-/* --- Utility Functions (Context Menu, Drag/Drop, Modal) --- */
-
+/* ---------- Context Menu ---------- */
 function hideContextMenu() {
     document.getElementById('context-menu').style.display = 'none';
     document.removeEventListener('click', hideContextMenuOnOutsideClick);
 }
-
 function hideContextMenuOnOutsideClick(e) {
     const menu = document.getElementById('context-menu');
     if (!menu.contains(e.target) && e.target !== activeBoxElement && !menu.contains(e.target)) {
         hideContextMenu();
     }
 }
-
 function showContextMenu(boxElement, x, y) {
     hideContextMenu(); 
     activeBoxElement = boxElement;
-    
+    const entry = boxFileMap.get(parseInt(boxElement.id.split('-')[2]));
+    const isPDF = isPdfPageEntry(entry);
+    document.getElementById('context-adjust').style.display = isPDF ? 'none' : 'list-item';
+    document.getElementById('context-crop').style.display = isPDF ? 'none' : 'list-item'; 
     const contextMenu = document.getElementById('context-menu');
     contextMenu.style.left = `${Math.min(x, window.innerWidth - 170)}px`;
     contextMenu.style.top = `${Math.min(y, window.innerHeight - contextMenu.offsetHeight - 10)}px`;
     contextMenu.style.display = 'block';
-
-    setTimeout(() => {
-        document.addEventListener('click', hideContextMenuOnOutsideClick);
-    }, 10);
+    setTimeout(() => { document.addEventListener('click', hideContextMenuOnOutsideClick); }, 10);
 }
-
-// *** FIX: Consolidated context menu actions to ensure activeBoxElement is set ***
 window.handleContextMenuAction = function(action) {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) {
-        if (action !== '🗑️ Delete File') { 
-            alert("No file found in this box to edit.");
+        if (action !== '🗑️ Delete File') {
+            alert("No file in this box to edit.");
             hideContextMenu();
             return;
         }
     }
-    
-    if (action === '🗑️ Delete File') {
-        deleteFile();
-    } else {
-        openEditingModal(action);
-    }
+    if (action === '🗑️ Delete File') deleteFile();
+    else openEditingModal(action);
 }
 
-
-/* --- Modal Handlers --- */
+/* ---------- Modal handlers ---------- */
 function openEditingModal(action) {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) {
-        alert("No file found in this box to edit. Please upload a file first.");
+        alert("No file found in this box to edit. Upload a file first.");
         hideContextMenu();
         return;
     }
-    
     const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
-    const file = boxFileMap.get(divisionNumber);
-    currentModalAction = action; // Set the current action
+    const entry = boxFileMap.get(divisionNumber);
+    currentModalAction = action;
+    const isPDF = isPdfPageEntry(entry);
 
-    // Show/Hide controls based on the action
-    document.getElementById('adjust-controls').style.display = action === '💡 Photo Adjust' ? 'block' : 'none';
-    document.getElementById('crop-controls').style.display = action === '✂️ Crop Option' ? 'block' : 'none';
-    
-    // Set Modal Title based on the action that triggered it
+    document.getElementById('adjust-controls').style.display = (!isPDF && action === '💡 Photo Adjust') ? 'block' : 'none';
+    document.getElementById('crop-controls').style.display = (!isPDF && action === '✂️ Crop Option') ? 'block' : 'none';
+
+    document.getElementById('modal-adjust-btn').disabled = isPDF;
+    document.getElementById('modal-crop-btn').disabled = isPDF;
+    document.getElementById('modal-adjust-btn').style.opacity = isPDF ? 0.5 : 1;
+    document.getElementById('modal-crop-btn').style.opacity = isPDF ? 0.5 : 1;
+
     document.getElementById('modal-title').textContent = `${action} View for Box ${divisionNumber}`;
     document.getElementById('modal-file-name').textContent = activeBoxElement.dataset.fileName;
-    document.getElementById('modal-file-type').textContent = file ? file.type : 'Unknown/Placeholder';
+    document.getElementById('modal-file-type').textContent = isPDF ? 'application/pdf (page preview)' : (entry && entry.type ? entry.type : 'Unknown/Placeholder');
 
     const preview = document.getElementById('modal-preview');
-    preview.innerHTML = ''; // Clear existing content
+    preview.innerHTML = '';
 
-    if (file && file.type.startsWith('image/')) {
+    // Reset modal pdf nav
+    modalPdfObj = null; modalPdfPageNum = 1; modalPdfTotalPages = 1; modalPdfCurrentBoxId = null;
+    document.getElementById('pdf-nav-controls').style.display = 'none';
+
+    if (isPdfPageEntry(entry)) {
+        // We already have the pdf doc object in entry.pdf (loaded once) and show it in high quality.
+        modalPdfObj = entry.pdf;
+        modalPdfTotalPages = modalPdfObj.numPages;
+        modalPdfPageNum = entry.pageNumber;
+        modalPdfCurrentBoxId = divisionNumber;
+        document.getElementById('pdf-nav-controls').style.display = 'block';
+        document.getElementById('pdf-page-indicator').textContent = `Page ${modalPdfPageNum} / ${modalPdfTotalPages}`;
+        renderPdfPageInModal(modalPdfObj, modalPdfPageNum, preview);
+    } else if (entry && entry.type && entry.type.startsWith('image/')) {
+        // image File directly stored
         const reader = new FileReader();
-        reader.onload = function(event) {
+        reader.onload = function(ev) {
             const img = document.createElement('img');
-            img.src = event.target.result;
+            img.src = ev.target.result;
             img.alt = activeBoxElement.dataset.fileName;
-            
-            // 1. Apply existing filter/crop styles from the box's dataset if they exist
-            img.style.filter = activeBoxElement.dataset.filter || 'none'; 
+            img.style.filter = activeBoxElement.dataset.filter || 'none';
             preview.appendChild(img);
-            
-            // 2. Set initial values for inputs when modal opens
+
             const currentBrightness = activeBoxElement.dataset.brightness || '100';
             const currentContrast = activeBoxElement.dataset.contrast || '100';
             document.getElementById('brightness-input').value = currentBrightness;
             document.getElementById('contrast-input').value = currentContrast;
-            
-            // 3. Set initial values for Crop: use saved data or default to box size for simulation
-            // Use the box's current size on screen (in pixels) if no crop data is saved
+
             const currentCropWidth = activeBoxElement.dataset.cropWidth || activeBoxElement.clientWidth;
             const currentCropHeight = activeBoxElement.dataset.cropHeight || activeBoxElement.clientHeight;
             document.getElementById('crop-width-input').value = currentCropWidth;
             document.getElementById('crop-height-input').value = currentCropHeight;
-            
-            // 4. Update the preview simulation based on initial values
             updateModalPreviewImageCrop();
         };
-        // Use the stored File object for preview
-        reader.readAsDataURL(file); 
-    } else if (activeBoxElement.dataset.fileName.toLowerCase().includes('(placeholder)')) {
-        preview.innerHTML = `<span style="font-size: 16px; color: #ccc;">Document Preview Placeholder: ${activeBoxElement.dataset.fileName}</span>`;
+        reader.readAsDataURL(entry);
     } else {
-        preview.innerHTML = `<span style="font-size: 16px; color: #ccc;">Cannot display direct preview for ${file ? file.type : 'Unknown'} file type.</span>`;
+        // Unknown/unsupported - show name
+        preview.innerHTML = `<span style="color:#ccc">Cannot render preview for this item.</span>`;
     }
 
     document.getElementById('edit-modal').style.display = 'flex';
-    // Add active class for transition effect
-    document.getElementById('edit-modal').classList.add('active'); 
+    document.getElementById('edit-modal').classList.add('active');
     hideContextMenu();
 }
 
-// Function to update the image filter in the modal preview
+/* ---------- Modal PDF rendering & nav (Uses the unified high quality scale) ---------- */
+function renderPdfPageInModal(pdf, pageNum, previewContainer) {
+    previewContainer.innerHTML = '';
+    pdf.getPage(pageNum).then(page => {
+        const previewContainerWidth = Math.min(previewContainer.clientWidth || 800, 900);
+        const pageViewport1 = page.getViewport({ scale: 1 });
+
+        // Calculate scale to fit the preview container's width, then multiply by the unified print quality scale
+        const baseScaleToFit = previewContainerWidth / pageViewport1.width;
+        const finalScale = baseScaleToFit * PDF_PRINT_QUALITY_SCALE;
+        
+        const viewport = page.getViewport({ scale: finalScale });
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set the actual pixel dimensions (high resolution)
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+        
+        // Set CSS size to 100% of the container to display the high-res canvas sharply
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+
+        const renderContext = { canvasContext: ctx, viewport: viewport };
+        page.render(renderContext).promise.then(() => {
+            previewContainer.appendChild(canvas);
+            document.getElementById('pdf-page-indicator').textContent = `Page ${modalPdfPageNum} / ${modalPdfTotalPages}`;
+        }).catch(err => {
+            previewContainer.innerHTML = `<div style="color:#ccc">Error rendering PDF page: ${err.message}</div>`;
+        });
+    }).catch(err => {
+        previewContainer.innerHTML = `<div style="color:#ccc">Error loading PDF page: ${err.message}</div>`;
+    });
+}
+
+document.getElementById('pdf-prev-btn')?.addEventListener('click', () => {
+    if (!modalPdfObj) return;
+    if (modalPdfPageNum > 1) {
+        modalPdfPageNum--;
+        renderPdfPageInModal(modalPdfObj, modalPdfPageNum, document.getElementById('modal-preview'));
+    }
+});
+document.getElementById('pdf-next-btn')?.addEventListener('click', () => {
+    if (!modalPdfObj) return;
+    if (modalPdfPageNum < modalPdfTotalPages) {
+        modalPdfPageNum++;
+        renderPdfPageInModal(modalPdfObj, modalPdfPageNum, document.getElementById('modal-preview'));
+    }
+});
+
+/* ---------- Image adjustments helpers ---------- */
 function updateModalPreviewImageFilter() {
     const preview = document.getElementById('modal-preview');
     const img = preview.querySelector('img');
@@ -615,27 +509,20 @@ function updateModalPreviewImageFilter() {
         img.style.filter = filterStyle;
     }
 }
-
-// Function to simulate crop (by setting dimensions of a container around the image)
 function updateModalPreviewImageCrop() {
     const preview = document.getElementById('modal-preview');
-    const width = document.getElementById('crop-width-input').value;
-    const height = document.getElementById('crop-height-input').value;
-    
-    // Reset any previous styles before applying the new ones
+    const width = Number(document.getElementById('crop-width-input').value);
+    const height = Number(document.getElementById('crop-height-input').value);
     preview.style.width = 'auto';
     preview.style.height = 'auto';
     preview.style.maxWidth = '100%';
-
-    // Simulate the crop area on the preview container itself
     if (currentModalAction === '✂️ Crop Option') {
          preview.style.width = `${width}px`;
          preview.style.height = `${height}px`;
          preview.style.maxWidth = '100%';
-    } 
+    }
 }
 
-// Event listeners for the adjustment inputs (for live preview)
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('brightness-input')?.addEventListener('input', updateModalPreviewImageFilter);
     document.getElementById('contrast-input')?.addEventListener('input', updateModalPreviewImageFilter);
@@ -645,269 +532,270 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.applyImageAdjustments = function() {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) return;
-
+    const entry = boxFileMap.get(parseInt(activeBoxElement.id.split('-')[2]));
+    if (isPdfPageEntry(entry)) return;
     const brightness = document.getElementById('brightness-input').value;
     const contrast = document.getElementById('contrast-input').value;
     const filterStyle = `brightness(${brightness}%) contrast(${contrast}%)`;
-    
-    // 1. Apply to the preview image in the modal
     updateModalPreviewImageFilter();
-
-    // 2. Update the main box element on the page (for visual feedback)
     const boxImg = activeBoxElement.querySelector('img');
-    if (boxImg) {
-        boxImg.style.filter = filterStyle;
-    }
-    
-    // 3. Store the values in the activeBoxElement dataset
+    if (boxImg) boxImg.style.filter = filterStyle;
     activeBoxElement.dataset.brightness = brightness;
     activeBoxElement.dataset.contrast = contrast;
-    activeBoxElement.dataset.filter = filterStyle; 
-
-    // Removed alert to keep things clean.
+    activeBoxElement.dataset.filter = filterStyle;
 }
-
 window.resetImageAdjustments = function() {
     document.getElementById('brightness-input').value = '100';
     document.getElementById('contrast-input').value = '100';
     updateModalPreviewImageFilter();
-
     if (activeBoxElement) {
         const boxImg = activeBoxElement.querySelector('img');
-        if (boxImg) {
-            boxImg.style.filter = 'none';
-        }
+        if (boxImg) boxImg.style.filter = 'none';
         delete activeBoxElement.dataset.brightness;
         delete activeBoxElement.dataset.contrast;
         delete activeBoxElement.dataset.filter;
     }
-    // Removed alert to keep things clean.
 }
 
-// *** FIX: Apply the custom width/height to the box element on the main screen ***
 window.applyCrop = function() {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) return;
-
+    const entry = boxFileMap.get(parseInt(activeBoxElement.id.split('-')[2]));
+    if (isPdfPageEntry(entry)) return;
     const cropWidth = document.getElementById('crop-width-input').value;
     const cropHeight = document.getElementById('crop-height-input').value;
-
-    // 1. Apply to the preview image in the modal (simulated by container size)
     updateModalPreviewImageCrop();
-
-    // 2. APPLY THE VISUAL CHANGE TO THE MAIN BOX ELEMENT (THE FIX)
     activeBoxElement.style.width = `${cropWidth}px`;
     activeBoxElement.style.height = `${cropHeight}px`;
-    activeBoxElement.style.flexShrink = '0'; // Prevent grid resizing from overriding the custom size
-
-    // 3. Store the values in the activeBoxElement dataset
+    activeBoxElement.style.flexShrink = '0';
     activeBoxElement.dataset.cropWidth = cropWidth;
     activeBoxElement.dataset.cropHeight = cropHeight;
-
-    // Removed alert to keep things clean.
 }
-
 
 window.closeModal = function() {
     document.getElementById('edit-modal').classList.remove('active');
-    // Reset modal-preview size/styles after closing
     const preview = document.getElementById('modal-preview');
     preview.style.width = 'auto';
     preview.style.height = 'auto';
-    
     setTimeout(() => {
         document.getElementById('edit-modal').style.display = 'none';
         activeBoxElement = null;
         currentModalAction = '';
-    }, 300); // Match CSS transition time
+        modalPdfObj = null;
+        modalPdfPageNum = 1;
+        modalPdfTotalPages = 1;
+        modalPdfCurrentBoxId = null;
+    }, 300);
 }
 
-// Handler when user selects a file from the modal's replace input
+/* Replace from modal */
 function handleModalFileReplacement(e) {
     const file = e.target.files[0];
     if (!file || !activeBoxElement) return;
-
     const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
-    
-    renderFileInBox(activeBoxElement, file);
+    // If PDF replace: behave like main upload (split pages)
+    if (file.type === 'application/pdf') {
+        handlePdfFile(file);
+        // Remove the old entry
+        deleteFileFromModal();
+        e.target.value = null;
+        return;
+    }
+    // otherwise image
+    // INSTANTLY RESERVE SLOT BEFORE ASYNC RENDER
+    boxFileMap.set(divisionNumber, file);
     activeBoxElement.dataset.fileName = file.name;
-    boxFileMap.set(divisionNumber, file); // Update the stored file object
-    
-    // Removed alert, just re-open
-    openEditingModal('🔄 Replace File');
-    e.target.value = null; // Clear input
+
+    renderFileInBox(activeBoxElement, file).then(() => {
+        openEditingModal('🔄 Replace File');
+        e.target.value = null;
+    }).catch(() => {
+        // Handle failure by cleaning up the slot
+        boxFileMap.delete(divisionNumber);
+        delete activeBoxElement.dataset.fileName;
+        alert(`Failed to replace file with ${file.name}.`);
+        closeModal();
+    });
 }
 
 window.deleteFileFromModal = function() { 
     if (!activeBoxElement) return;
     const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
-    
-    // Find and reapply the correct empty color class based on divisionNumber
-    const colorClasses = ['color-a', 'color-b', 'color-c', 'color-d'];
+    const colorClasses = ['color-a','color-b','color-c','color-d'];
     const colorIndex = (divisionNumber - 1) % colorClasses.length;
-    
-    // --- NEW: Class management for empty state ---
     activeBoxElement.classList.remove('filled-state');
     activeBoxElement.classList.add('empty-state', colorClasses[colorIndex]);
-
-    // Clear box content
     activeBoxElement.innerHTML = `<span>Page ${divisionNumber}</span>`;
-    // activeBoxElement.style.background = '#f7f7f7'; // Removed, now handled by class
-    activeBoxElement.style.backgroundImage = 'none'; 
-    
-    // Clear custom data
-    delete activeBoxElement.dataset.fileName; 
-    delete activeBoxElement.dataset.brightness; 
-    delete activeBoxElement.dataset.contrast; 
-    delete activeBoxElement.dataset.filter; 
-    delete activeBoxElement.dataset.cropWidth; 
-    delete activeBoxElement.dataset.cropHeight; 
-    
-    // *** FIX: Clear custom styles on the box ***
+    activeBoxElement.style.backgroundImage = 'none';
+    delete activeBoxElement.dataset.fileName;
+    delete activeBoxElement.dataset.brightness;
+    delete activeBoxElement.dataset.contrast;
+    delete activeBoxElement.dataset.filter;
+    delete activeBoxElement.dataset.cropWidth;
+    delete activeBoxElement.dataset.cropHeight;
     activeBoxElement.style.width = '';
     activeBoxElement.style.height = '';
     activeBoxElement.style.flexShrink = '';
-    
-    boxFileMap.delete(divisionNumber); // Delete from map
-
-    // Removed alert
+    boxFileMap.delete(divisionNumber);
     closeModal();
 }
 
-/* --- Context Menu Handlers (Now open Modal) --- */
+/* ---------- Render files (images & PDFs) - Uses Unified High Quality Scale ---------- */
+async function renderFileInBox(boxElement, fileOrEntry) {
+    return new Promise((resolve, reject) => {
+        boxElement.innerHTML = '';
+        const emptyClasses = ['color-a','color-b','color-c','color-d'];
+        boxElement.classList.remove('empty-state', ...emptyClasses);
+        boxElement.classList.add('filled-state');
+        boxElement.style.backgroundImage = 'none';
+        boxElement.style.position = 'relative';
 
-// Delete remains a direct action
-window.deleteFile = function() {
-    if (!activeBoxElement) return;
-    const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
-    
-    // Find and reapply the correct empty color class based on divisionNumber
-    const colorClasses = ['color-a', 'color-b', 'color-c', 'color-d'];
-    const colorIndex = (divisionNumber - 1) % colorClasses.length;
-    
-    // --- NEW: Class management for empty state ---
-    activeBoxElement.classList.remove('filled-state');
-    activeBoxElement.classList.add('empty-state', colorClasses[colorIndex]);
-    
-    activeBoxElement.innerHTML = `<span>Page ${divisionNumber}</span>`;
-    // activeBoxElement.style.background = '#f7f7f7'; // Removed, now handled by class
-    activeBoxElement.style.backgroundImage = 'none'; 
-    
-    // Clear custom data
-    delete activeBoxElement.dataset.fileName; 
-    delete activeBoxElement.dataset.brightness; 
-    delete activeBoxElement.dataset.contrast; 
-    delete activeBoxElement.dataset.filter; 
-    delete activeBoxElement.dataset.cropWidth; 
-    delete activeBoxElement.dataset.cropHeight; 
-    
-    // *** FIX: Clear custom styles on the box ***
-    activeBoxElement.style.width = '';
-    activeBoxElement.style.height = '';
-    activeBoxElement.style.flexShrink = '';
-    
-    boxFileMap.delete(divisionNumber);
-    // Removed alert
-    hideContextMenu();
-}
+        // restore saved size if it exists
+        if (boxElement.dataset.cropWidth && boxElement.dataset.cropHeight) {
+            boxElement.style.width = `${boxElement.dataset.cropWidth}px`;
+            boxElement.style.height = `${boxElement.dataset.cropHeight}px`;
+            boxElement.style.flexShrink = '0';
+        } else {
+            boxElement.style.width = '';
+            boxElement.style.height = '';
+            boxElement.style.flexShrink = '';
+        }
 
-// *** FIX: Re-apply crop size when file is loaded/replaced ***
-function renderFileInBox(boxElement, file) {
-    const mimeType = file.type;
-    boxElement.innerHTML = '';
-    
-    // --- NEW: Class management for filled state ---
-    // Find and remove the empty color class (e.g., color-a)
-    const emptyClasses = ['color-a', 'color-b', 'color-c', 'color-d'];
-    boxElement.classList.remove('empty-state', ...emptyClasses);
-    boxElement.classList.add('filled-state');
-    
-    // boxElement.style.background = '#e8f5e9'; // Handled by .filled-state
-    boxElement.style.backgroundImage = 'none'; 
-    boxElement.style.position = 'relative'; 
+        const fileNameSpan = document.createElement('span');
+        fileNameSpan.style.cssText = 'position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.5); color:white; padding:1px 4px; font-size:8px; z-index:10;';
 
-    // Re-apply saved crop size if it exists (THE FIX)
-    if (boxElement.dataset.cropWidth && boxElement.dataset.cropHeight) {
-        boxElement.style.width = `${boxElement.dataset.cropWidth}px`;
-        boxElement.style.height = `${boxElement.dataset.cropHeight}px`;
-        boxElement.style.flexShrink = '0';
-    } else {
-        // Ensure the box size is reset to grid defaults if no crop data is present
-        boxElement.style.width = '';
-        boxElement.style.height = '';
-        boxElement.style.flexShrink = '';
-    }
-
-    if (mimeType.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const img = document.createElement('img');
-            img.src = event.target.result;
-            img.alt = file.name;
-            // Re-apply filter/crop from dataset if available
-            img.style.filter = boxElement.dataset.filter || 'none';
-            boxElement.appendChild(img);
+        // If it's a PDF page entry
+        if (isPdfPageEntry(fileOrEntry)) {
+            const pdf = fileOrEntry.pdf;
+            const pageNum = fileOrEntry.pageNumber;
+            fileNameSpan.textContent = fileOrEntry.name || (`PDF page ${pageNum}`);
             
-            const fileNameSpan = document.createElement('span');
-            fileNameSpan.textContent = file.name;
-            fileNameSpan.style.cssText = 'position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.5); color:white; padding:1px 4px; font-size:8px; z-index:10;';
-            boxElement.appendChild(fileNameSpan);
-        };
-        reader.readAsDataURL(file);
-    } else {
-        boxElement.innerHTML = `<span>File: ${file.name}</span>`;
-    }
+            // UNIFIED MAX QUALITY: Always use the high quality scale (4.0)
+            const finalScaleFactor = PDF_PRINT_QUALITY_SCALE;
+
+            pdf.getPage(pageNum).then(page => {
+                
+                // 1. Get the page's natural dimensions at scale 1
+                const pageViewport1 = page.getViewport({ scale: 1 });
+                
+                // 2. Get the current box's width in screen pixels (the target display size)
+                const boxWidthPx = Math.max(10, boxElement.clientWidth || 200); 
+
+                // 3. Calculate scale to fit the box width.
+                const baseScaleToFit = boxWidthPx / pageViewport1.width;
+
+                // 4. Apply the chosen scale factor for the final rendering resolution.
+                const finalScale = baseScaleToFit * finalScaleFactor; 
+
+                const viewport = page.getViewport({ scale: finalScale });
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                // 5. Set the canvas's actual pixel dimensions (always high resolution)
+                canvas.width = Math.round(viewport.width); 
+                canvas.height = Math.round(viewport.height); 
+
+                // 6. Set the CSS size to 100% of the container (the box). This is the key:
+                // The high-res canvas is rendered, but the CSS shrinks it to fit the box size, 
+                // resulting in a visually high-quality, sharp preview.
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+
+                const renderContext = { canvasContext: context, viewport: viewport };
+                page.render(renderContext).promise.then(() => {
+                    // Check if the box is still active before appending (prevents race conditions)
+                    if (boxElement.contains(canvas)) return; 
+                    boxElement.appendChild(canvas);
+                    boxElement.appendChild(fileNameSpan);
+                    resolve();
+                }).catch(err => {
+                    boxElement.innerHTML = `<span>Error rendering PDF page: ${err.message}</span>`;
+                    reject(err);
+                });
+            }).catch(err => {
+                boxElement.innerHTML = `<span>Error getting PDF page: ${err.message}</span>`;
+                reject(err);
+            });
+            return;
+        }
+
+        // Otherwise expect an image File
+        const file = fileOrEntry;
+        if (file && file.type && file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                img.alt = file.name || 'image';
+                img.style.filter = boxElement.dataset.filter || 'none';
+                fileNameSpan.textContent = file.name || 'image';
+                boxElement.appendChild(img);
+                boxElement.appendChild(fileNameSpan);
+                resolve();
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+            return;
+        }
+
+        // Fallback: show unsupported
+        fileNameSpan.textContent = fileOrEntry.name || 'Unsupported';
+        boxElement.innerHTML = `<span>File: ${fileOrEntry.name || 'Unsupported Preview'}</span>`;
+        boxElement.appendChild(fileNameSpan);
+        resolve();
+    });
 }
 
-function handleDragOver(e) { e.preventDefault(); if (e.dataTransfer.types.includes('Files')) { e.currentTarget.style.border = '2px solid blue'; } }
+
+/* ---------- Drag & Drop and Box interactions ---------- */
+function handleDragOver(e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) e.currentTarget.style.border = '2px solid blue'; }
 function handleDragLeave(e) { e.currentTarget.style.border = '1px dashed #ccc'; }
 function handleDrop(e) {
     e.preventDefault();
     handleDragLeave(e);
     const files = e.dataTransfer.files;
-    if (files.length > 0) {
+    if (files && files.length > 0) {
         const file = files[0];
         const boxElement = e.currentTarget;
         const divisionNumber = parseInt(boxElement.id.split('-')[2]);
+        // If drop onto specific box, we want to render into that box directly.
+        // For PDFs dropped onto a specific box, place successive PDF pages starting at this box position.
+        if (file.type === 'application/pdf') {
+            placePdfFileStartingAtBox(file, divisionNumber);
+        } else if (file.type.startsWith('image/')) {
+            // render single image into the clicked box
+            // INSTANTLY RESERVE SLOT
+            boxFileMap.set(divisionNumber, file);
+            boxElement.dataset.fileName = file.name;
 
-        renderFileInBox(boxElement, file);
-        boxElement.dataset.fileName = file.name;
-        boxFileMap.set(divisionNumber, file); // Store the file object
+            renderFileInBox(boxElement, file).catch(err => {
+                console.error(err);
+                // On render failure, free slot
+                boxFileMap.delete(divisionNumber);
+                delete boxElement.dataset.fileName;
+            });
+        } else {
+            alert('Unsupported file type.');
+        }
     }
 }
-
 function handleBoxClick(e) {
     const box = e.currentTarget;
-    if (e.button === 2) { 
-        // Right-click opens the context menu
-        e.preventDefault(); 
-        if (box.dataset.fileName) { 
-            showContextMenu(box, e.clientX, e.clientY); 
-        } 
-        return; 
-    } 
-    if (e.button === 0 && box.dataset.fileName) { 
-        // Left-click on a filled box opens the modal
-        activeBoxElement = box;
-        openEditingModal('💡 Photo Adjust'); // Default action on left-click is now Photo Adjust
-    }
+    if (e.button === 2) { e.preventDefault(); if (box.dataset.fileName) showContextMenu(box, e.clientX, e.clientY); return; }
+    if (e.button === 0 && box.dataset.fileName) { activeBoxElement = box; openEditingModal('💡 Photo Adjust'); }
 }
 
-/* --- Page & Grid Functions --- */
-
+/* ---------- Page & Grid functions ---------- */
 function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
     const boxWInput = document.getElementById('box-width');
     const boxHInput = document.getElementById('box-height');
-    
     if (isCustomSize) {
-        // If a custom size is active, set the inputs to the custom values
         boxWInput.value = currentBoxWidth.toFixed(1);
         boxHInput.value = currentBoxHeight.toFixed(1);
         boxWInput.removeAttribute('data-calculated');
         boxHInput.removeAttribute('data-calculated');
-        return; 
+        return;
     }
-    
-    // Default constrained calculation
     const size = PAPER_SIZES[paperSizeKey];
     const totalHorizontalMargin = marginLeft + marginRight;
     const totalVerticalMargin = marginTop + marginBottom;
@@ -915,82 +803,53 @@ function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
     const printableHeight = size.h - totalVerticalMargin;
     let newWidth = (printableWidth - (currentLayout.cols - 1) * currentColGap) / currentLayout.cols;
     let newHeight = (printableHeight - (currentLayout.rows - 1) * currentRowGap) / currentLayout.rows;
-    
     currentBoxWidth = Math.max(1, newWidth);
     currentBoxHeight = Math.max(1, newHeight);
-    
-    // Update input fields with calculated size
     boxWInput.value = currentBoxWidth.toFixed(1);
     boxHInput.value = currentBoxHeight.toFixed(1);
-    boxWInput.setAttribute('data-calculated', 'true');
-    boxHInput.setAttribute('data-calculated', 'true');
+    boxWInput.setAttribute('data-calculated','true');
+    boxHInput.setAttribute('data-calculated','true');
 }
-
 function applyGridStyles(container) {
     container.style.padding = `${marginTop}mm ${marginRight}mm ${marginBottom}mm ${marginLeft}mm`;
-    
-    // Use currentBoxWidth/Height (which will be custom if isCustomSize is true)
     container.style.gridTemplateColumns = `repeat(${currentLayout.cols}, ${currentBoxWidth}mm)`;
     container.style.gridTemplateRows = `repeat(${currentLayout.rows}, ${currentBoxHeight}mm)`;
-    
-    container.style.gridColumnGap = `${currentColGap}mm`; 
-    container.style.gridRowGap = `${currentRowGap}mm`; 
+    container.style.gridColumnGap = `${currentColGap}mm`;
+    container.style.gridRowGap = `${currentRowGap}mm`;
 }
-
 function createPage(pageIndex){
   const wrapper = document.getElementById('page-wrapper');
   const pageDiv = document.createElement('div');
   pageDiv.classList.add(`${currentPaperSize}-page`, 'paper');
   pageDiv.id = `page-${pageIndex}`;
-  
-  if (document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') {
-    pageDiv.classList.add('hidden');
-  }
-  
+  if (document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') pageDiv.classList.add('hidden');
+
   const gridContainer = document.createElement('div');
   gridContainer.classList.add('grid-container');
   applyGridStyles(gridContainer);
-  
-  // Define color classes for alternating empty boxes
-  const colorClasses = ['color-a', 'color-b', 'color-c', 'color-d'];
 
-  for (let i = 0; i < currentLayout.boxesPerPage; i++) {
+  const colorClasses = ['color-a','color-b','color-c','color-d'];
+  for (let i=0;i<currentLayout.boxesPerPage;i++){
       const box = document.createElement('div');
       box.classList.add('box');
-      box.id = `box-div-${nextDivisionNumber}`; 
-      box.innerHTML = `<span>Page ${nextDivisionNumber}</span>`; 
-      
-      // --- NEW: Apply alternating empty box color classes ---
+      box.id = `box-div-${nextDivisionNumber}`;
+      box.innerHTML = `<span>Page ${nextDivisionNumber}</span>`;
       const colorIndex = (nextDivisionNumber - 1) % colorClasses.length;
-      box.classList.add('empty-state', colorClasses[colorIndex]); // Start as empty
-      
+      box.classList.add('empty-state', colorClasses[colorIndex]);
       box.addEventListener('dragover', handleDragOver);
       box.addEventListener('dragleave', handleDragLeave);
       box.addEventListener('drop', handleDrop);
       box.addEventListener('click', handleBoxClick);
-      box.addEventListener('contextmenu', handleBoxClick); 
-      
-      // Re-render file content if it was stored
+      box.addEventListener('contextmenu', handleBoxClick);
       if (boxFileMap.has(nextDivisionNumber)) {
-          // Temporarily create a placeholder file object to get the name/type
           const file = boxFileMap.get(nextDivisionNumber);
-          const tempFile = file.type === 'application/pdf' ? 
-              { name: `${file.name} (Page 1 Placeholder)`, type: 'application/pdf' } : file;
-          
-          // Must ensure the box data attributes are set before rendering
-          box.dataset.fileName = tempFile.name; 
-          
-          // --- NEW: Update classes for filled state ---
+          box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${nextDivisionNumber}`);
           box.classList.remove('empty-state', colorClasses[colorIndex]);
           box.classList.add('filled-state');
-          
-          // To reapply styles and content, we need the stored file
-          renderFileInBox(box, file); 
+          renderFileInBox(box, file);
       }
-
-
       gridContainer.appendChild(box);
-      nextDivisionNumber++; 
+      nextDivisionNumber++;
   }
   pageDiv.appendChild(gridContainer);
   wrapper.appendChild(pageDiv);
@@ -998,369 +857,346 @@ function createPage(pageIndex){
 
 window.resetPaper = function(){
   const wrapper = document.getElementById('page-wrapper');
-  wrapper.innerHTML = ''; 
-  
-  // Save the current file map state
+  wrapper.innerHTML = '';
   const tempBoxFileMap = new Map(boxFileMap);
   const totalDivisions = nextDivisionNumber - 1;
-
   currentPageIndex = 0;
-  nextDivisionNumber = 1; 
-  currentInterleavedFileIndex = 0; 
-  boxFileMap.clear(); // Will be rebuilt
-
-  // Recalculate size to ensure it's up-to-date (either constrained or custom)
-  calculateConstrainedBoxSize(); 
-  
-  // Recreate all necessary pages
+  nextDivisionNumber = 1;
+  currentInterleavedFileIndex = 0;
+  boxFileMap.clear();
+  calculateConstrainedBoxSize();
   const totalPagesNeeded = Math.ceil(totalDivisions / currentLayout.boxesPerPage);
-  const numPagesToCreate = Math.max(2, totalPagesNeeded); // Always start with at least 2 pages
-
-  for (let i = 0; i < numPagesToCreate; i++) {
-      // Recreate the page and its divisions
-      createPage(i);
-  }
-
-  // Restore the file map
+  const numPagesToCreate = Math.max(2, totalPagesNeeded);
+  for (let i=0;i<numPagesToCreate;i++) createPage(i);
   boxFileMap = tempBoxFileMap;
-
-  // Re-render files into the newly created boxes
-  for (const [divisionNumber, file] of boxFileMap.entries()) {
+  const renderPromises = [];
+  for (const [divisionNumber,file] of boxFileMap.entries()){
       const box = document.getElementById(`box-div-${divisionNumber}`);
       if (box) {
-          // Need to ensure the box has the correct empty class applied before renderFileInBox removes it
-          const colorClasses = ['color-a', 'color-b', 'color-c', 'color-d'];
+          const colorClasses = ['color-a','color-b','color-c','color-d'];
           const colorIndex = (divisionNumber - 1) % colorClasses.length;
-          box.classList.add('empty-state', colorClasses[colorIndex]); 
-          
-          box.dataset.fileName = file.name;
-          renderFileInBox(box, file);
+          box.classList.remove('empty-state', colorClasses[colorIndex]);
+          box.classList.add('filled-state');
+          box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${divisionNumber}`);
+          renderPromises.push(renderFileInBox(box, file));
       }
   }
-
-  hideContextMenu();
+  Promise.all(renderPromises).then(hideContextMenu).catch(()=>hideContextMenu());
 };
 
-// 🌟 NEW: Live update function for Margins
 window.updateMargins = function() {
     marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
     marginBottom = parseFloat(document.getElementById('margin-bottom').value) || 0;
     marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
     marginRight = parseFloat(document.getElementById('margin-right').value) || 0;
-    
-    // Margins change the printable area, so custom size should be cleared
-    isCustomSize = false; 
-    document.getElementById('box-width').setAttribute('data-calculated', 'true');
-    document.getElementById('box-height').setAttribute('data-calculated', 'true');
-    
-    resetPaper();
-}
-
-// 🌟 NEW: Live update function for Division Size (makes it custom)
-window.updateDivisionSize = function() {
-    currentBoxWidth = parseFloat(document.getElementById('box-width').value) || 1;
-    currentBoxHeight = parseFloat(document.getElementById('box-height').value) || 1;
-    
-    if (currentBoxWidth < 1 || currentBoxHeight < 1) return;
-    
-    isCustomSize = true; // Mark that we are using custom dimensions
-    document.getElementById('box-width').removeAttribute('data-calculated');
-    document.getElementById('box-height').removeAttribute('data-calculated');
-    
+    isCustomSize = false;
+    document.getElementById('box-width').setAttribute('data-calculated','true');
+    document.getElementById('box-height').setAttribute('data-calculated','true');
     resetPaper();
 };
 
-// 🌟 NEW: Live update function for Gaps
+window.updateDivisionSize = function() {
+    currentBoxWidth = parseFloat(document.getElementById('box-width').value) || 1;
+    currentBoxHeight = parseFloat(document.getElementById('box-height').value) || 1;
+    if (currentBoxWidth < 1 || currentBoxHeight < 1) return;
+    isCustomSize = true;
+    document.getElementById('box-width').removeAttribute('data-calculated');
+    document.getElementById('box-height').removeAttribute('data-calculated');
+    resetPaper();
+};
+
 window.updateGapSizes = function() {
     currentColGap = parseFloat(document.getElementById('col-gap-input').value) || 0;
     currentRowGap = parseFloat(document.getElementById('row-gap-input').value) || 0;
-    
-    // Applying gaps forces a recalculation (constrained)
-    isCustomSize = false; 
-    document.getElementById('box-width').setAttribute('data-calculated', 'true');
-    document.getElementById('box-height').setAttribute('data-calculated', 'true');
-    
+    isCustomSize = false;
+    document.getElementById('box-width').setAttribute('data-calculated','true');
+    document.getElementById('box-height').setAttribute('data-calculated','true');
     resetPaper();
 };
 
 function handlePaperSizeChange(newSize) {
     currentPaperSize = newSize;
-    // Changing paper size should clear custom size
-    isCustomSize = false; 
-    document.getElementById('box-width').setAttribute('data-calculated', 'true');
-    document.getElementById('box-height').setAttribute('data-calculated', 'true');
-    
+    isCustomSize = false;
+    document.getElementById('box-width').setAttribute('data-calculated','true');
+    document.getElementById('box-height').setAttribute('data-calculated','true');
     resetPaper();
 }
 window.addNewPage = function() {
-    currentPageIndex++; 
+    currentPageIndex++;
     createPage(currentPageIndex);
     const newPage = document.getElementById(`page-${currentPageIndex}`);
-    if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') {
-        newPage.classList.add('hidden');
-    }
-};
+    if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') newPage.classList.add('hidden');
+}
 
-/* --- Upload Logic - Mode Management --- */
-
+/* ---------- Upload Mode logic ---------- */
+// Use the boxFileMap as the source of truth for filled slots in serial mode
 function getNextSerialBoxID() {
-    for (let i = 1; i < nextDivisionNumber; i++) {
+    for (let i=1;i<nextDivisionNumber;i++){
         const box = document.getElementById(`box-div-${i}`);
-        if (box && !box.dataset.fileName) {
-             return i;
-        }
+        if (box && !boxFileMap.has(i)) return i; // Check map for instant reservation
     }
     return nextDivisionNumber;
 }
 
 function getInterleavedID(mode) {
-    currentInterleavedFileIndex++; 
+    currentInterleavedFileIndex++;
+    const BPP = currentLayout.boxesPerPage;
     const F = currentInterleavedFileIndex;
-    const BPP = currentLayout.boxesPerPage; // 4
-    const block = 2 * BPP; // 8
-    
-    const blockIndex = Math.floor((F - 1) / block); 
-    const blockBaseID = blockIndex * block + 1; // 1, 9, 17, ...
-    const F_g = F - (blockIndex * block); // File index within the 8-box block (1 to 8)
-    
-    let targetID; 
-
-    if (F_g % 2 === 1) { 
-        // Odd files (1, 3, 5, 7) -> Page 1 (IDs 1, 2, 3, 4)
-        targetID = blockBaseID + (F_g + 1) / 2 - 1; 
-    } else { 
-        // Even files (2, 4, 6, 8) -> Page 2 (IDs 5, 6, 7, 8)
-        const B_on_page = F_g / 2; // 1, 2, 3, 4
-        
+    const block = 2 * BPP;
+    const blockIndex = Math.floor((F - 1) / block);
+    const blockBaseID = blockIndex * block + 1;
+    const F_g = F - (blockIndex * block);
+    let targetID;
+    if (F_g % 2 === 1) {
+        targetID = blockBaseID + (F_g + 1)/2 - 1;
+    } else {
+        const B_on_page = F_g / 2;
         if (mode === 'interleaved-standard') {
-             // Standard: 5, 6, 7, 8 (order 1, 2, 3, 4 on P2)
-            const pageTwoBase = blockBaseID + BPP; // 5, 13, 21, ...
+            const pageTwoBase = blockBaseID + BPP;
             targetID = pageTwoBase + B_on_page - 1;
         } else if (mode === 'interleaved-custom') {
-            // Custom: 6, 5, 8, 7 (order 1, 2, 3, 4 on P2 maps to 6, 5, 8, 7)
-            const boxIDInBlock = PAGE_TWO_CUSTOM_ORDER_OFFSET[B_on_page - 1]; 
+            const boxIDInBlock = PAGE_TWO_CUSTOM_ORDER_OFFSET[B_on_page - 1];
             targetID = blockBaseID + boxIDInBlock - 1;
         }
     }
-    
     return targetID;
 }
 
-
 function getNextTargetBoxID() {
-    if (uploadMode === 'serial') {
-        currentInterleavedFileIndex = 0; 
-        return getNextSerialBoxID();
-    } else {
-        return getInterleavedID(uploadMode);
-    }
+    if (uploadMode === 'serial') { currentInterleavedFileIndex = 0; return getNextSerialBoxID(); }
+    else return getInterleavedID(uploadMode);
 }
-
 function checkAndCreatePages(requiredID) {
-  while (requiredID >= nextDivisionNumber) { 
-      currentPageIndex++; 
+  while (requiredID >= nextDivisionNumber) {
+      currentPageIndex++;
       createPage(currentPageIndex);
-      
       const newPage = document.getElementById(`page-${currentPageIndex}`);
-      if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') {
-          newPage.classList.add('hidden');
-      }
+      if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') newPage.classList.add('hidden');
   }
 }
 
-function handleSinglePhotoUpload(file){ 
-    if (!file) return;
-    
-    if (file.type === 'application/pdf') {
-        handlePdfUpload(file);
-        return;
-    }
-    
-    let targetID = getNextTargetBoxID();
-    
-    if (uploadMode !== 'serial' && document.getElementById(`box-div-${targetID}`)?.dataset.fileName) {
-        alert("The next calculated slot is already filled. Please use Serial mode or delete the existing content first.");
-        currentInterleavedFileIndex--; 
-        return;
-    }
-    
-    checkAndCreatePages(targetID); 
-    
-    const box = document.getElementById(`box-div-${targetID}`); 
-    
-    if (box) {
-        renderFileInBox(box, file);
-        box.dataset.fileName = file.name;
-        boxFileMap.set(targetID, file); // Store the file object
-    }
-}
+/* ---------- Handling uploaded files ---------- */
 
-function handleMultiPhotoUpload(files){ 
-    if (!files || files.length===0) return; 
-    
+/* handle multi-file uploads (now handles single files too) */
+function handleMultiPhotoUpload(files){
+    if (!files || files.length === 0) return;
     Array.from(files).forEach(f => {
-        if (f.type === 'application/pdf') {
-            handlePdfUpload(f);
-        } else {
-            let targetID = getNextTargetBoxID();
-
-            if (uploadMode !== 'serial' && document.getElementById(`box-div-${targetID}`)?.dataset.fileName) {
-                alert(`File ${f.name} skipped: The next calculated slot (Box ${targetID}) is already filled.`);
-                currentInterleavedFileIndex--; 
-                return; 
-            }
-            
-            checkAndCreatePages(targetID);
-            
-            const box = document.getElementById(`box-div-${targetID}`);
-            
-            if (box) {
-                renderFileInBox(box, f);
-                box.dataset.fileName = f.name;
-                boxFileMap.set(targetID, f); // Store the file object
-            }
-        }
+        if (f.type === 'application/pdf') handlePdfFile(f);
+        else if (f.type.startsWith('image/')) handleFile(f);
+        else alert(`File ${f.name} skipped: Only Images and PDFs are supported.`);
     });
 }
 
-function handlePdfUpload(file) {
-    alert(`PDF: ${file.name} is selected. Showing a placeholder for the first page.`);
-    
+/* handle a normal image File into the next target slot */
+function handleFile(file) {
     const targetID = getNextTargetBoxID();
-    
-    if (uploadMode !== 'serial' && document.getElementById(`box-div-${targetID}`)?.dataset.fileName) {
-        alert("PDF placement failed: The next calculated slot is already filled. Please use Serial mode or delete the existing content first.");
-        currentInterleavedFileIndex--; 
+
+    // Interleaved check (only needed for interleaved modes)
+    if (uploadMode !== 'serial' && boxFileMap.has(targetID)) {
+        alert(`File ${file.name} skipped: The next calculated slot (Box ${targetID}) is already filled. Use Serial mode or delete existing content.`);
+        currentInterleavedFileIndex--;
         return;
     }
 
     checkAndCreatePages(targetID);
-    
     const box = document.getElementById(`box-div-${targetID}`);
-    
     if (box) {
-        const placeholderFile = {
-            name: `${file.name} (Page 1 Placeholder)`,
-            type: 'application/pdf', 
-        };
-        // The file object stored in the map will be the actual PDF for modal preview
+        // INSTANTLY RESERVE SLOT (Key fix for multi-upload sync)
         boxFileMap.set(targetID, file); 
-        renderFileInBox(box, placeholderFile);
-        box.dataset.fileName = placeholderFile.name; 
+        box.dataset.fileName = file.name;
+        
+        renderFileInBox(box, file).catch(error => {
+            // Failure cleanup
+            console.error(`Error rendering file ${file.name} in box ${targetID}:`, error);
+            alert(`Could not display ${file.name}. Check console for details.`);
+            box.innerHTML = `<span>Error: ${file.name}</span>`;
+            // On failure, free the slot
+            boxFileMap.delete(targetID);
+            delete box.dataset.fileName;
+            if (uploadMode !== 'serial') currentInterleavedFileIndex--;
+        });
     }
 }
 
-/* --- Misc Functions --- */
 
-function toggleControls(){ 
-  const panel = document.getElementById('controls-panel-container'); 
-  panel.classList.toggle('hidden'); 
-  const btn = document.getElementById('toggle-controls-btn'); 
-  btn.innerHTML = panel.classList.contains('hidden') ? '&#9664;' : '&#10006;'; 
+/* ---------- Handle an uploaded PDF file: ---------- */
+function handlePdfFile(file) {
+    // Read as ArrayBuffer once
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        const arrayBuffer = ev.target.result;
+        // Load PDF once (pass raw ArrayBuffer)
+        pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(pdfDoc => {
+            const total = pdfDoc.numPages;
+            // For each page create an entry and place in slots
+            for (let p = 1; p <= total; p++) {
+                // compute the next slot now (so multi-page PDF follows Upload Mode mapping)
+                const targetID = getNextTargetBoxID();
+                // If slot filled in interleaved mode, bail gracefully (adjust index)
+                if (uploadMode !== 'serial' && boxFileMap.has(targetID)) {
+                    // If occupied, step back interleaved counter and skip placing this page
+                    currentInterleavedFileIndex--;
+                    continue;
+                }
+                checkAndCreatePages(targetID);
+                const box = document.getElementById(`box-div-${targetID}`);
+                if (!box) continue;
+                // create pdfPageEntry referencing the loaded pdfDoc
+                const entry = {
+                    kind: 'pdfpage',
+                    pdf: pdfDoc,            // PDFDocumentProxy from pdf.js (reused safely)
+                    pageNumber: p,
+                    name: `${file.name} (p${p})`,
+                    origName: file.name
+                };
+                // store entry and render (reservation is here, before async renderFileInBox)
+                boxFileMap.set(targetID, entry);
+                // set box dataset filename for UI & persist
+                box.dataset.fileName = entry.name;
+                // render using the UNIFIED MAX QUALITY SCALE
+                renderFileInBox(box, entry).catch(err => console.error('PDF page render error:', err));
+            }
+        }).catch(err => {
+            alert('Failed to parse PDF: ' + err.message);
+            console.error(err);
+        });
+    };
+    reader.onerror = function(err) {
+        alert('Failed to read PDF file.');
+        console.error(err);
+    };
+    reader.readAsArrayBuffer(file);
 }
 
+/* ---------- Utility: if user drags PDF onto a specific box we want to start placing pages there ---------- */
+function placePdfFileStartingAtBox(file, startBoxId) {
+    // read arrayBuffer once then getDocument and then place pages starting at that box
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        const arrayBuffer = ev.target.result;
+        pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(pdfDoc => {
+            let pointer = startBoxId;
+            const total = pdfDoc.numPages;
+            
+            // Clear existing content from the start box onwards for a clean place operation
+            for(let i=startBoxId; i < nextDivisionNumber; i++){
+                const existingBox = document.getElementById(`box-div-${i}`);
+                if(existingBox) deleteFileFromBox(existingBox); // Use a cleaner helper function
+            }
+            
+            for (let p = 1; p <= total; p++) {
+                checkAndCreatePages(pointer);
+                const box = document.getElementById(`box-div-${pointer}`);
+                if (!box) { pointer++; continue; }
+                const entry = {
+                    kind: 'pdfpage',
+                    pdf: pdfDoc,
+                    pageNumber: p,
+                    name: `${file.name} (p${p})`,
+                    origName: file.name
+                };
+                boxFileMap.set(pointer, entry);
+                box.dataset.fileName = entry.name;
+                // render using the UNIFIED MAX QUALITY SCALE
+                renderFileInBox(box, entry).catch(err => console.error('PDF page render error:', err));
+                pointer++;
+            }
+        }).catch(err => {
+            alert('Failed to parse PDF: ' + err.message);
+            console.error(err);
+        });
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function deleteFileFromBox(boxElement) {
+    const divisionNumber = parseInt(boxElement.id.split('-')[2]);
+    const colorClasses = ['color-a','color-b','color-c','color-d'];
+    const colorIndex = (divisionNumber - 1) % colorClasses.length;
+    boxElement.classList.remove('filled-state');
+    boxElement.classList.add('empty-state', colorClasses[colorIndex]);
+    boxElement.innerHTML = `<span>Page ${divisionNumber}</span>`;
+    boxElement.style.backgroundImage = 'none';
+    delete boxElement.dataset.fileName;
+    delete boxElement.dataset.brightness;
+    delete boxElement.dataset.contrast;
+    delete boxElement.dataset.filter;
+    delete boxElement.dataset.cropWidth;
+    delete boxElement.dataset.cropHeight;
+    boxElement.style.width = '';
+    boxElement.style.height = '';
+    boxElement.style.flexShrink = '';
+    boxFileMap.delete(divisionNumber);
+}
+window.deleteFile = function() {
+    if (activeBoxElement) {
+        deleteFileFromBox(activeBoxElement);
+        hideContextMenu();
+    }
+}
+
+
+/* ---------- Misc UI helpers ---------- */
+function toggleControls(){
+  const panel = document.getElementById('controls-panel-container');
+  panel.classList.toggle('hidden');
+  const btn = document.getElementById('toggle-controls-btn');
+  btn.innerHTML = panel.classList.contains('hidden') ? '&#9664;' : '&#10006;';
+}
 function togglePaper(){
   const allPages = document.querySelectorAll('.paper');
   allPages.forEach(p=>p.classList.toggle('hidden'));
   const button = document.getElementById('togglePaperBtn');
-  if (allPages[0] && allPages[0].classList.contains('hidden')) {
-    button.textContent = 'Show Screen Paper'; 
-  } else { 
-    button.textContent = 'Hide Screen Paper';
-  }
+  if (allPages[0] && allPages[0].classList.contains('hidden')) button.textContent = 'Show Screen Paper';
+  else button.textContent = 'Hide Screen Paper';
 }
-
 function toggleBackground(){
-  document.body.classList.toggle('bg-image'); document.body.classList.toggle('bg-gradient');
+  document.body.classList.toggle('bg-image');
+  document.body.classList.toggle('bg-gradient');
   document.getElementById('toggle-bg-btn').textContent = document.body.classList.contains('bg-image') ? '💧 Show Gradient Background' : '🌈 Show Background Image';
 }
 
-
-/* 🌟 NEW: Function to attach live input listeners 🌟 */
 function attachLiveListeners() {
-    // 1. Margins
-    ['margin-top', 'margin-bottom', 'margin-left', 'margin-right'].forEach(id => {
-        document.getElementById(id).addEventListener('input', updateMargins);
-    });
-
-    // 2. Division Size
-    ['box-width', 'box-height'].forEach(id => {
-        document.getElementById(id).addEventListener('input', updateDivisionSize);
-    });
-
-    // 3. Gap Spacing
-    ['row-gap-input', 'col-gap-input'].forEach(id => {
-        document.getElementById(id).addEventListener('input', updateGapSizes);
-    });
+    ['margin-top','margin-bottom','margin-left','margin-right'].forEach(id => document.getElementById(id).addEventListener('input', updateMargins));
+    ['box-width','box-height'].forEach(id => document.getElementById(id).addEventListener('input', updateDivisionSize));
+    ['row-gap-input','col-gap-input'].forEach(id => document.getElementById(id).addEventListener('input', updateGapSizes));
 }
 
-
-/* ---------- Initialization ---------- */
-document.addEventListener('DOMContentLoaded', ()=>{
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=> {
   document.getElementById('togglePaperBtn').textContent = 'Show Screen Paper';
-
-  // Initialize margin and gap values
   marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
   marginBottom = parseFloat(document.getElementById('margin-bottom').value) || 0;
   marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
   marginRight = parseFloat(document.getElementById('margin-right').value) || 0;
   currentColGap = parseFloat(document.getElementById('col-gap-input').value) || 0;
   currentRowGap = parseFloat(document.getElementById('row-gap-input').value) || 0;
-  
-  // 🌟 Attach live listeners right after initialization
   attachLiveListeners();
-
-  // Initial calculation based on default values (constrained)
   calculateConstrainedBoxSize();
-
   document.getElementById('toggle-controls-btn').addEventListener('click', toggleControls);
   document.getElementById('toggle-bg-btn').addEventListener('click', toggleBackground);
   document.getElementById('togglePaperBtn').addEventListener('click', togglePaper);
-  
-  document.getElementById('paper-size-select').addEventListener('change', (e) => {
-    handlePaperSizeChange(e.target.value);
-  });
-  
-  // Upload Mode Event Listener
+  document.getElementById('paper-size-select').addEventListener('change', (e) => handlePaperSizeChange(e.target.value));
   document.querySelectorAll('input[name="uploadMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             uploadMode = e.target.value;
+            // When switching to interleaved mode, reset counter based on filled boxes count
             if (uploadMode !== 'serial') {
                 const filledBoxes = document.querySelectorAll('.box[data-file-name]').length;
                 currentInterleavedFileIndex = filledBoxes;
-            } else {
-                currentInterleavedFileIndex = 0;
-            }
+            } else currentInterleavedFileIndex = 0; // When switching to serial, reset counter to 0
             alert(`Switched to ${uploadMode.replace(/-/g, ' ').toUpperCase()} mode.`);
         });
-    });
-  
+  });
   resetPaper();
-
   const multiFileInput = document.getElementById('multi-file-input');
-  const singleFileInput = document.getElementById('single-file-input');
-
   document.getElementById('multi-upload-btn').addEventListener('click', ()=> multiFileInput.click());
-  document.getElementById('single-upload-btn').addEventListener('click', ()=> singleFileInput.click());
-
   multiFileInput.addEventListener('change', (ev)=>{ handleMultiPhotoUpload(ev.target.files); ev.target.value = null; });
-  singleFileInput.addEventListener('change', (ev)=>{ handleSinglePhotoUpload(ev.target.files[0]); ev.target.value = null; });
-  
-  // Close modal when clicking outside of modal-content
-  document.getElementById('edit-modal').addEventListener('click', (e) => {
-      if (e.target.id === 'edit-modal') {
-          closeModal();
-      }
-  });
 
-  // Global document click handler for context menu
-  document.addEventListener('click', (e) => {
-      const contextMenu = document.getElementById('context-menu');
-      if (contextMenu.style.display === 'block' && !contextMenu.contains(e.target)) {
-          hideContextMenu();
-      }
-  });
+  document.getElementById('edit-modal').addEventListener('click', (e) => { if (e.target.id === 'edit-modal') closeModal(); });
+  document.addEventListener('click', (e) => { const contextMenu = document.getElementById('context-menu'); if (contextMenu.style.display === 'block' && !contextMenu.contains(e.target)) hideContextMenu(); });
 });
+
 </script>
 </body>
 </html>

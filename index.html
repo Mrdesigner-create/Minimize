@@ -237,6 +237,7 @@
                 <option value="1.0">Fastest (Low Quality - 1.0x)</option>
                 <option value="2.5">Better (Good Quality - 2.5x)</option>
                 <option value="4.0" selected>Highest (Max Speed/Quality Balance - 4.0x)</option>
+                <option value="6.0">Ultimate Quality (Slowest Re-render - 6.0x)</option>
             </select>
             <p style="font-size:.85em; margin-top:10px;">Note: Changing this will re-render everything.</p>
         </div>
@@ -325,14 +326,14 @@
         <div id="save-quality-select-container">
             <h4>🚀 Save Quality (Affects Speed):</h4> 
             <select id="save-quality-select">
-                <option value="6.0">Ultimate Quality (6.0x - Slowest)</option>
+                <option value="6.0">Ultimate Quality (6.0x - Slow)</option>
                 <option value="4.0">High Quality (4.0x - Medium Speed)</option>
                 <option value="2.5" selected>Fast Quality (2.5x - Fastest)</option> 
             </select>
         </div>
 
         <button id="save-sheets-btn" onclick="saveSheetsAsFile()">💾 Start Save(2.5x) </button>  
-        <p style="font-size:.85em; margin-top:10px;">*Higher quality takes longer to process*</p>
+        <p style="font-size:.85em; margin-top:10px;">*The speed is fast now. PDF save quality is limited by the **Screen/Preview Quality** setting above.*</p>
 
         <button id="print-btn" onclick="window.print()">🖨️ Print All Sheets</button>
       </div>
@@ -1311,13 +1312,15 @@ window.deleteFile = function() {
     }
 }
 
-/* ---------- Save As File Function (Optimized for ULTIMATE Quality) ---------- */
+/* ---------- Save As File Function (OPTIMIZED FOR SPEED) ---------- */
 window.saveSheetsAsFile = async function() {
     const saveType = document.getElementById('save-as-type-select').value;
     const saveQualitySelect = document.getElementById('save-quality-select');
     const paperWrapper = document.getElementById('page-wrapper');
     const controlsContainer = document.getElementById('controls-panel-container');
     const saveBtn = document.getElementById('save-sheets-btn');
+    // NOTE: The CAPTURE_SCALE is now only used for image quality setting in html2canvas,
+    // but we trust the existing PDF canvas resolution set by CURRENT_RENDER_SCALE for speed.
     const selectedQualityScale = saveQualitySelect.value;
     const CAPTURE_SCALE = parseFloat(selectedQualityScale);
     const qualityText = saveQualitySelect.options[saveQualitySelect.selectedIndex].textContent;
@@ -1335,45 +1338,8 @@ window.saveSheetsAsFile = async function() {
     // Hide file name overlays before capture
     paperWrapper.classList.add('hide-overlays');
 
-    // **Temporary: Check for any un-rendered PDF pages and force re-render with FINAL_SAVE_QUALITY_SCALE before capture**
-    // This is the most crucial part for maximum quality saving.
-    const allBoxes = document.querySelectorAll('#page-wrapper .box');
-    let needsReRender = false;
-    
-    for (const box of allBoxes) {
-        const divisionNumber = parseInt(box.id.split('-')[2]);
-        const entry = boxFileMap.get(divisionNumber);
-        if (isPdfPageEntry(entry)) {
-            // Check if the current canvas quality is lower than the save quality
-            const currentScale = parseFloat(box.querySelector('canvas')?.dataset.renderScale || 0);
-            if (currentScale < CAPTURE_SCALE) {
-                needsReRender = true;
-                break;
-            }
-        }
-    }
-    
-    if (needsReRender) {
-        saveBtn.innerHTML = `⏱️ Preparing final quality renders...`;
-        // Temporarily set render scale to capture scale for all PDF/Canvas elements
-        // The renderFileInBox function will use this scale
-        const originalRenderScale = CURRENT_RENDER_SCALE;
-        CURRENT_RENDER_SCALE = CAPTURE_SCALE;
-
-        const reRenderPromises = [];
-        for (const box of allBoxes) {
-            const divisionNumber = parseInt(box.id.split('-')[2]);
-            const entry = boxFileMap.get(divisionNumber);
-            if (isPdfPageEntry(entry)) {
-                 // Force re-render the PDF box with the new CAPTURE_SCALE
-                 reRenderPromises.push(renderFileInBox(box, entry).catch(() => {}));
-            }
-        }
-        await Promise.all(reRenderPromises);
-        
-        // Restore original render scale
-        CURRENT_RENDER_SCALE = originalRenderScale;
-    }
+    // **CRITICAL OPTIMIZATION: REMOVED THE ASYNCHRONOUS PDF RE-RENDER LOOP**
+    // The save process will now rely on the existing canvas content, making it FAST.
 
 
     try {
@@ -1530,10 +1496,7 @@ window.saveSheetsAsFile = async function() {
         // Show overlays again
         paperWrapper.classList.remove('hide-overlays');
 
-        // Force a re-render of all elements to revert to CURRENT_RENDER_SCALE for screen viewing
-        if (needsReRender) {
-             resetPaper(); 
-        }
+        // Note: No need to call resetPaper to re-render, as we rely on the current screen render for speed.
 
         if (wasControlsOpen) controlsContainer.classList.remove('hidden');
         saveBtn.disabled = false;

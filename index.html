@@ -3,21 +3,35 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Minimize</title>
+  <title>All-in-one-minimize</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <script>
     // Set the worker URL for PDF.js - required.
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    // *** MAX QUALITY UPGRADE (Unified Scale) ***
-    // This single constant is now used for ALL PDF rendering (screen and print)
-    // to ensure max quality is always visible. (4.0 is print-ready.)
-    const PDF_PRINT_QUALITY_SCALE = 4.0; 
+    // --- OPTIMIZATION: Configurable Quality Scales ---
+    // Lowest scale for fastest, lowest resolution rendering.
+    const LOW_QUALITY_SCALE = 1.0; 
+    // Medium scale for good on-screen quality and FASTEST save speed.
+    const DEFAULT_QUALITY_SCALE = 2.5; 
+    // Highest practical scale for smooth live screen rendering or better save speed.
+    const SCREEN_MAX_QUALITY_SCALE = 4.0; 
+    // ULTIMATE scale for final PDF/Image saving and printing. (Highest Quality)
+    const FINAL_SAVE_QUALITY_SCALE = 6.0; 
+
+    // Global variable to track the current quality scale for screen rendering and browser printing
+    let CURRENT_RENDER_SCALE = 4.0; // Changed default to SCREEN_MAX_QUALITY_SCALE (4.0)
+
+    // Global map to store loaded PDF documents by a unique ID, to avoid reloading
+    const loadedPDFs = new Map();
+    let nextPdfId = 1;
   </script>
 
   <style>
-    /* ---------- Styles (kept from your file + a few tiny adjustments) ---------- */
     :root { 
         --paper-padding-mm: 10; 
         --toggle-controls-bg: red;    
@@ -41,12 +55,16 @@
     .a5-page { width:148mm; min-height:210mm; }
     .a6-page { width:105mm; min-height:148mm; }
     .us-letter-page { width:8.5in; min-height:11in; }
+    .a4-page.landscape { width:297mm; min-height:210mm; }
+    .a5-page.landscape { width:210mm; min-height:148mm; }
+    .a6-page.landscape { width:148mm; min-height:105mm; }
+    .us-letter-page.landscape { width:11in; min-height:8.5in; }
 
     .paper {
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       background:#fff;
       margin-bottom:20px;
-      padding:10mm; 
+      padding:0; 
       box-sizing:border-box;
       position: relative;
     }
@@ -62,29 +80,27 @@
       font-size: 10px;
       color: #999;
       box-sizing: border-box;
-      cursor: pointer; 
+      cursor: pointer;
       transition: border-color 0.2s;
-      overflow: hidden; 
-      padding: 0; 
-      background-size: cover; 
-      background-position: center; 
+      overflow: hidden;
+      padding: 0;
+      background-size: cover;
+      background-position: center;
       background-repeat: no-repeat;
       min-width: 0;
       min-height: 0;
       position: relative;
     }
     .box:hover { border-color: #3498db; }
-    /* Ensure image and canvas are contained within the box and display block */
     .box img, .box canvas { width: 100%; height: 100%; object-fit: contain; display: block; margin: auto; }
     .box canvas { max-width: 100%; max-height: 100%; display: block; }
 
-    /* Alternating Empty Box Colors */
-    .box.empty-state.color-a { background-color: #f0f8ff !important; } 
-    .box.empty-state.color-b { background-color: #fff8e1 !important; } 
-    .box.empty-state.color-c { background-color: #e1f3e8 !important; } 
-    .box.empty-state.color-d { background-color: #fbebf7 !important; } 
+    .box.empty-state.color-a { background-color: #f0f8ff !important; }
+    .box.empty-state.color-b { background-color: #fff8e1 !important; }
+    .box.empty-state.color-c { background-color: #e1f3e8 !important; }
+    .box.empty-state.color-d { background-color: #fbebf7 !important; }
 
-    .box.filled-state { background-color: #e8f5e9 !important; } 
+    .box.filled-state { background-color: #e8f5e9 !important; }
 
     .controls { padding:10px; background:red; border:1px solid #95a5a6; z-index:10000; max-width:360px;
       text-align:center; max-height:80vh; overflow-y:auto; overflow-x:hidden;
@@ -104,9 +120,38 @@
     .input-group input { width: 50%; }
     .input-group-four { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 
-    .input-group-radio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; background: #fff; padding: 5px; border-radius: 4px; }
-    .input-group-radio label { display: flex; align-items: center; justify-content: center; padding: 4px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 10px; cursor: pointer; }
-    .input-group-radio input[type="radio"] { margin-right: 2px; width: auto; }
+    .input-group-radio {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 5px;
+        background: #eee !important;
+        border: 1px solid #aaa !important;
+        padding: 5px;
+        border-radius: 4px;
+    }
+    .input-group-radio label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+        background-color: LightYellow !important;
+        color: #333 !important;
+        transition: background-color 0.2s;
+    }
+    .input-group-radio label:hover { background-color: gold !important; }
+    .input-group-radio input[type="radio"] { margin-right: 2px; width: auto; display: none; }
+    .input-group-radio input[type="radio"]:checked + span {
+        font-weight: bold;
+        color: white !important;
+        background-color: LimeGreen !important;
+        border-radius: 4px;
+        padding: 4px;
+    }
+    .input-group-radio label span { pointer-events: none; }
 
     #context-menu {
         position: fixed;
@@ -144,27 +189,34 @@
     .modal-actions .btn-adjust { background-color: #f39c12; }
 
     @media print {
-      .controls-panel-container, #toggle-controls-btn, #toggle-bg-btn, #togglePaperBtn, #add-page-btn, #context-menu, #edit-modal { display:none; }
+      .controls-panel-container, #toggle-controls-btn, #toggle-bg-btn, #togglePaperBtn, #add-page-btn, #context-menu, #edit-modal, #save-as-type-select, #save-sheets-btn, #quality-select-container, #save-quality-select-container { display:none; }
       body { padding:0; background-color:white; }
       .paper { width:auto !important; min-height:auto !important; margin:0; padding:0; box-shadow:none; page-break-after:always; }
+      .a4-page.landscape { -webkit-print-color-adjust: exact; size: A4 landscape !important; }
+      .us-letter-page.landscape { -webkit-print-color-adjust: exact; size: letter landscape !important; }
+      /* Print will use the ULTIMATE scale (6.0x) for capture via browser's rendering of canvas elements */
       .box { border: none !important; background-color: white !important; }
-      .box span { display: none; } 
-      .box canvas { width: 100%; height: 100%; display: block; } /* The high-res canvas created by renderFileInBox is used here */
+      .box span { display: none; }
+      .box canvas { width: 100%; height: 100%; display: block; }
       @page { margin:0; }
     }
+    
+    /* ADDED: Style to hide the filename overlay during save capture */
+    #page-wrapper.hide-overlays .file-name-overlay {
+        display: none !important;
+    }
 
-    /* Button colors */
     #togglePaperBtn { background-color: yellow !important; color: black !important; border-color: black !important; font-weight: bold !important; border-width: 2px !important; }
     #paper-size-select { background-color: purple !important; color: white !important; border-color: yellow !important; font-weight: bold !important; border-width: 2px !important; -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; }
     #print-btn { background-color: crimson !important; color: white !important; border-color: #3498db !important; font-weight: bold !important; border-width: 2px !important; }
     #add-page-btn { background-color: orangered !important; color: white !important; border-color: #333 !important; font-weight: bold !important; border-width: 2px !important; }
     #multi-upload-btn { background-color: deepskyblue !important; color: white !important; border-color: navy !important; font-weight: bold !important; border-width: 2px !important; }
+    #save-sheets-btn { background-color: darkgreen !important; color: white !important; border-color: #333 !important; font-weight: bold !important; border-width: 2px !important; transition: background-color 0.15s, opacity 0.15s; }
+    #save-as-type-select { background-color: LightCoral !important; color: white !important; border-color: #333 !important; font-weight: bold !important; border-width: 2px !important; -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important;}
+    #quality-select, #save-quality-select { background-color: LightBlue !important; color: #333 !important; border-color: navy !important; font-weight: bold !important; border-width: 2px !important; -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important;}
 
     .controls input[type="number"] { background-color: LightCyan !important; color: #333 !important; border: 2px solid DarkCyan !important; }
-    .input-group-radio { background: #eee !important; border: 1px solid #aaa !important; }
-    .input-group-radio label { background-color: LightYellow !important; border-color: #aaa !important; color: #333 !important; transition: background-color 0.2s; }
-    .input-group-radio label:hover { background-color: gold !important; }
-    .input-group-radio input[type="radio"]:checked + span { font-weight: bold; color: white !important; background-color: LimeGreen !important; border-radius: 4px; padding: 4px; }
+
   </style>
 </head>
 <body class="bg-image">
@@ -177,7 +229,43 @@
 
       <div id="controls-content">
         <button id="togglePaperBtn">Show Screen Paper</button>
-        <button id="add-page-btn" onclick="addNewPage()">➕ Add Empty Page (4 Divisions)</button>
+        <button id="add-page-btn" onclick="addNewPage()">➕ Add Empty Page (1 Divisions)</button> 
+        
+        <div id="quality-select-container">
+            <h4>⚙️ Screen/Preview Quality (Speed):</h4> 
+            <select id="quality-select">
+                <option value="1.0">Fastest (Low Quality - 1.0x)</option>
+                <option value="2.5">Better (Good Quality - 2.5x)</option>
+                <option value="4.0" selected>Highest (Max Speed/Quality Balance - 4.0x)</option>
+            </select>
+            <p style="font-size:.85em; margin-top:10px;">Note: Changing this will re-render everything.</p>
+        </div>
+
+        <h4>➗ Division Layout:</h4>
+        <div id="division-controls" class="input-group-radio"> 
+            <label>
+                <input type="radio" name="pageDivision" value="1" checked> <span>Divide 1 (1x1)</span>
+            </label>
+            <label>
+                <input type="radio" name="pageDivision" value="2">
+                <span>Divide 2 (1x2)</span>
+            </label>
+            <label>
+                <input type="radio" name="pageDivision" value="4">
+                <span>Divide 4 (2x2)</span>
+            </label>
+        </div>
+
+        <h4>🧭 Orientation:</h4>
+        <div id="orientation-controls" class="input-group-radio"> <label>
+                <input type="radio" name="paperOrientation" value="portrait" checked>
+                <span>Portrait</span>
+            </label>
+            <label>
+                <input type="radio" name="paperOrientation" value="landscape">
+                <span>Landscape</span>
+            </label>
+        </div>
 
         <h4>📄 Paper Size:</h4>
         <select id="paper-size-select">
@@ -186,57 +274,65 @@
           <option value="a5">A5 (148 x 210 mm)</option>
           <option value="a6">A6 (105 x 148 mm)</option>
         </select>
-        
-        <h4>-----------------</h4>
-        
+
         <h4>📐 Custom Margins (mm):</h4>
         <div class="input-group-four">
-            <input type="number" id="margin-top" min="0" value="0" placeholder="Top">
-            <input type="number" id="margin-bottom" min="0" value="0" placeholder="Bottom">
-            <input type="number" id="margin-left" min="0" value="0" placeholder="Left">
-            <input type="number" id="margin-right" min="0" value="0" placeholder="Right">
-        </div>
-        <h4>-----------------</h4>
+            <input type="number" id="margin-top" min="0" value="0" placeholder="Top"> <input type="number" id="margin-bottom" min="0" value="0" placeholder="Bottom"> <input type="number" id="margin-left" min="0" value="0" placeholder="Left"> <input type="number" id="margin-right" min="0" value="0" placeholder="Right"> </div>
 
         <h4>📏 Division Size (mm):</h4>
         <div class="input-group">
-            <input type="number" id="box-width" min="1" value="105" placeholder="Width (mm)" data-calculated="true">
-            <input type="number" id="box-height" min="1" value="148.5" placeholder="Height (mm)" data-calculated="true">
-        </div>
-        <p style="font-size:10px; margin: 0 0 10px;">(Calculated size to fit paper based on gaps.)</p>
-        <h4>-----------------</h4>
-        
+            <input type="number" id="box-width" min="1" value="210" placeholder="Width (mm)" data-calculated="true"> <input type="number" id="box-height" min="1" value="297" placeholder="Height (mm)" data-calculated="true"> </div>
+
         <h4>⬇️ Gap Spacing (mm):</h4>
         <div class="input-group">
             <input type="number" id="row-gap-input" min="0" value="5" placeholder="Row Gap (Vertical)">
             <input type="number" id="col-gap-input" min="0" value="5" placeholder="Column Gap (Horizontal)">
         </div>
-        <p style="font-size:10px; margin: 0 0 10px;">(Space between divisions.)</p>
-        <h4>-----------------</h4>
-        
+
         <h4>⬆️ Upload Mode:</h4>
-        <div class="input-group-radio">
-            <label>
+        <div id="upload-mode-controls" class="input-group-radio">
+            <label data-mode="serial" data-division="1,2,4">
                 <input type="radio" name="uploadMode" value="serial" checked>
                 <span>Serial Wise (1, 2, 3...)</span>
             </label>
-            <label>
+            <label data-mode="interleaved-A" data-division="2">
+                <input type="radio" name="uploadMode" value="interleaved-A">
+                <span>Interleaved (1, 3, 2, 4)</span>
+            </label>
+            <label data-mode="interleaved-standard" data-division="4">
                 <input type="radio" name="uploadMode" value="interleaved-standard">
                 <span>Standard Interleaved (1, 5, 2, 6)</span>
             </label>
-             <label>
+             <label data-mode="interleaved-custom" data-division="4">
                 <input type="radio" name="uploadMode" value="interleaved-custom">
                 <span>Custom Interleaved (1, 6, 2, 5)</span>
             </label>
         </div>
-        
-        <h4>-----------------</h4>
 
         <h4>📤 Upload Documents (PDF/DOC ready):</h4>
         <input id="multi-file-input" class="hidden-input" type="file" accept="image/*, .pdf" multiple>
         <button id="multi-upload-btn">➕ Choose Files (Images/PDF)</button>
 
-        <p style="font-size:.85em; margin-top:10px;">Note: Files are tracked and new pages are created when necessary.</p>
+        <h4>💾 Save Sheets As Type:</h4> 
+        <select id="save-as-type-select">
+            <option value="pdf" selected>PDF Document (*.pdf)</option> 
+            <option value="png">PNG Image (*.png)</option>
+            <option value="jpg">JPEG Image (*.jpg)</option>
+            <option value="doc">DOC Document (*.doc)</option>
+            <option value="docx">DOCX Document (*.docx)</option>
+        </select>
+
+        <div id="save-quality-select-container">
+            <h4>🚀 Save Quality (Affects Speed):</h4> 
+            <select id="save-quality-select">
+                <option value="6.0">Ultimate Quality (6.0x - Slowest)</option>
+                <option value="4.0">High Quality (4.0x - Medium Speed)</option>
+                <option value="2.5" selected>Fast Quality (2.5x - Fastest)</option> 
+            </select>
+        </div>
+
+        <button id="save-sheets-btn" onclick="saveSheetsAsFile()">💾 Start Save(2.5x) </button>  
+        <p style="font-size:.85em; margin-top:10px;">*Higher quality takes longer to process*</p>
 
         <button id="print-btn" onclick="window.print()">🖨️ Print All Sheets</button>
       </div>
@@ -319,27 +415,27 @@
 
 /* ---------- Constants & Globals ---------- */
 const PAPER_SIZES = { 'a4': { w:210, h:297 }, 'us-letter': { w:215.9, h:279.4 }, 'a5': { w:148, h:210 }, 'a6': { w:105, h:148 } };
-const PAGE_TWO_CUSTOM_ORDER_OFFSET = [6,5,8,7];
+const DIVISION_LAYOUTS = { '1': { cols: 1, rows: 1, boxesPerPage: 1 }, '2': { cols: 1, rows: 2, boxesPerPage: 2 }, '4': { cols: 2, rows: 2, boxesPerPage: 4 } };
 
-let marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0;
+let marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0; 
 let currentPaperSize = 'a4', currentBoxWidth = 0, currentBoxHeight = 0, currentColGap = 0, currentRowGap = 0;
 let isCustomSize = false;
-let currentLayout = { cols: 2, rows: 2, boxesPerPage: 4 };
+let currentDivision = '1'; 
+let currentOrientation = 'portrait';
+let currentLayout = DIVISION_LAYOUTS['1']; 
 let currentPageIndex = 0, nextDivisionNumber = 1;
 let activeBoxElement = null;
 let uploadMode = 'serial', currentInterleavedFileIndex = 0;
-let boxFileMap = new Map(); // stores either image File OR pdfPageEntry objects
+let boxFileMap = new Map();
 let currentModalAction = '';
 
-// Modal pdf state
 let modalPdfObj = null, modalPdfPageNum = 1, modalPdfTotalPages = 1, modalPdfCurrentBoxId = null;
 
-/* ---------- Helper: detect whether an entry is a PDF-page "entry" ---------- */
 function isPdfPageEntry(obj) {
-    return obj && obj.kind === 'pdfpage' && obj.pdf && typeof obj.pageNumber === 'number';
+    return obj && obj.kind === 'pdfpage' && typeof obj.pdfId === 'number' && typeof obj.pageNumber === 'number'; // Check for pdfId instead of pdf object
 }
 
-/* ---------- Context Menu ---------- */
+/* ---------- Context Menu & Modal handlers (kept as original) ---------- */
 function hideContextMenu() {
     document.getElementById('context-menu').style.display = 'none';
     document.removeEventListener('click', hideContextMenuOnOutsideClick);
@@ -351,12 +447,12 @@ function hideContextMenuOnOutsideClick(e) {
     }
 }
 function showContextMenu(boxElement, x, y) {
-    hideContextMenu(); 
+    hideContextMenu();
     activeBoxElement = boxElement;
     const entry = boxFileMap.get(parseInt(boxElement.id.split('-')[2]));
     const isPDF = isPdfPageEntry(entry);
     document.getElementById('context-adjust').style.display = isPDF ? 'none' : 'list-item';
-    document.getElementById('context-crop').style.display = isPDF ? 'none' : 'list-item'; 
+    document.getElementById('context-crop').style.display = isPDF ? 'none' : 'list-item';
     const contextMenu = document.getElementById('context-menu');
     contextMenu.style.left = `${Math.min(x, window.innerWidth - 170)}px`;
     contextMenu.style.top = `${Math.min(y, window.innerHeight - contextMenu.offsetHeight - 10)}px`;
@@ -375,7 +471,6 @@ window.handleContextMenuAction = function(action) {
     else openEditingModal(action);
 }
 
-/* ---------- Modal handlers ---------- */
 function openEditingModal(action) {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) {
         alert("No file found in this box to edit. Upload a file first.");
@@ -402,21 +497,25 @@ function openEditingModal(action) {
     const preview = document.getElementById('modal-preview');
     preview.innerHTML = '';
 
-    // Reset modal pdf nav
     modalPdfObj = null; modalPdfPageNum = 1; modalPdfTotalPages = 1; modalPdfCurrentBoxId = null;
     document.getElementById('pdf-nav-controls').style.display = 'none';
 
     if (isPdfPageEntry(entry)) {
-        // We already have the pdf doc object in entry.pdf (loaded once) and show it in high quality.
-        modalPdfObj = entry.pdf;
-        modalPdfTotalPages = modalPdfObj.numPages;
-        modalPdfPageNum = entry.pageNumber;
-        modalPdfCurrentBoxId = divisionNumber;
-        document.getElementById('pdf-nav-controls').style.display = 'block';
-        document.getElementById('pdf-page-indicator').textContent = `Page ${modalPdfPageNum} / ${modalPdfTotalPages}`;
-        renderPdfPageInModal(modalPdfObj, modalPdfPageNum, preview);
+        // Retrieve PDF object from the global map
+        const pdfDoc = loadedPDFs.get(entry.pdfId);
+        if (pdfDoc) {
+            modalPdfObj = pdfDoc;
+            modalPdfTotalPages = modalPdfObj.numPages;
+            modalPdfPageNum = entry.pageNumber;
+            modalPdfCurrentBoxId = divisionNumber;
+            document.getElementById('pdf-nav-controls').style.display = 'block';
+            document.getElementById('pdf-page-indicator').textContent = `Page ${modalPdfPageNum} / ${modalPdfTotalPages}`;
+            // Use CURRENT_RENDER_SCALE for modal preview
+            renderPdfPageInModal(modalPdfObj, modalPdfPageNum, preview);
+        } else {
+             preview.innerHTML = `<span style="color:#ccc">Error: PDF document not found in cache.</span>`;
+        }
     } else if (entry && entry.type && entry.type.startsWith('image/')) {
-        // image File directly stored
         const reader = new FileReader();
         reader.onload = function(ev) {
             const img = document.createElement('img');
@@ -438,7 +537,6 @@ function openEditingModal(action) {
         };
         reader.readAsDataURL(entry);
     } else {
-        // Unknown/unsupported - show name
         preview.innerHTML = `<span style="color:#ccc">Cannot render preview for this item.</span>`;
     }
 
@@ -447,29 +545,30 @@ function openEditingModal(action) {
     hideContextMenu();
 }
 
-/* ---------- Modal PDF rendering & nav (Uses the unified high quality scale) ---------- */
+/* ---------- Render PDF page in modal ---------- */
 function renderPdfPageInModal(pdf, pageNum, previewContainer) {
     previewContainer.innerHTML = '';
+    // Add loading indicator
+    previewContainer.innerHTML = '<span style="color:#f39c12; font-size: 1.2em;">Loading PDF Page...</span>';
+    
     pdf.getPage(pageNum).then(page => {
         const previewContainerWidth = Math.min(previewContainer.clientWidth || 800, 900);
         const pageViewport1 = page.getViewport({ scale: 1 });
 
-        // Calculate scale to fit the preview container's width, then multiply by the unified print quality scale
         const baseScaleToFit = previewContainerWidth / pageViewport1.width;
-        const finalScale = baseScaleToFit * PDF_PRINT_QUALITY_SCALE;
-        
+        // OPTIMIZATION: Use CURRENT_RENDER_SCALE for modal rendering
+        const finalScale = baseScaleToFit * CURRENT_RENDER_SCALE;
         const viewport = page.getViewport({ scale: finalScale });
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        // Set the actual pixel dimensions (high resolution)
         canvas.width = Math.round(viewport.width);
         canvas.height = Math.round(viewport.height);
-        
-        // Set CSS size to 100% of the container to display the high-res canvas sharply
         canvas.style.width = '100%';
         canvas.style.height = '100%';
+
+        previewContainer.innerHTML = ''; // Clear loading indicator
 
         const renderContext = { canvasContext: ctx, viewport: viewport };
         page.render(renderContext).promise.then(() => {
@@ -482,11 +581,17 @@ function renderPdfPageInModal(pdf, pageNum, previewContainer) {
         previewContainer.innerHTML = `<div style="color:#ccc">Error loading PDF page: ${err.message}</div>`;
     });
 }
-
 document.getElementById('pdf-prev-btn')?.addEventListener('click', () => {
     if (!modalPdfObj) return;
     if (modalPdfPageNum > 1) {
         modalPdfPageNum--;
+        // Update the boxFileMap entry for the currently open box
+        if (modalPdfCurrentBoxId && isPdfPageEntry(boxFileMap.get(modalPdfCurrentBoxId))) {
+            const entry = boxFileMap.get(modalPdfCurrentBoxId);
+            entry.pageNumber = modalPdfPageNum;
+            boxFileMap.set(modalPdfCurrentBoxId, entry);
+            renderFileInBox(document.getElementById(`box-div-${modalPdfCurrentBoxId}`), entry); // Re-render the box on the sheet
+        }
         renderPdfPageInModal(modalPdfObj, modalPdfPageNum, document.getElementById('modal-preview'));
     }
 });
@@ -494,11 +599,18 @@ document.getElementById('pdf-next-btn')?.addEventListener('click', () => {
     if (!modalPdfObj) return;
     if (modalPdfPageNum < modalPdfTotalPages) {
         modalPdfPageNum++;
+        // Update the boxFileMap entry for the currently open box
+        if (modalPdfCurrentBoxId && isPdfPageEntry(boxFileMap.get(modalPdfCurrentBoxId))) {
+            const entry = boxFileMap.get(modalPdfCurrentBoxId);
+            entry.pageNumber = modalPdfPageNum;
+            boxFileMap.set(modalPdfCurrentBoxId, entry);
+            renderFileInBox(document.getElementById(`box-div-${modalPdfCurrentBoxId}`), entry); // Re-render the box on the sheet
+        }
         renderPdfPageInModal(modalPdfObj, modalPdfPageNum, document.getElementById('modal-preview'));
     }
 });
 
-/* ---------- Image adjustments helpers ---------- */
+/* ---------- Image adjustment helpers (kept as original) ---------- */
 function updateModalPreviewImageFilter() {
     const preview = document.getElementById('modal-preview');
     const img = preview.querySelector('img');
@@ -587,21 +699,22 @@ window.closeModal = function() {
     }, 300);
 }
 
-/* Replace from modal */
+/* ---------- Replace, delete & render functions (kept as original, slight defensive fixes) ---------- */
 function handleModalFileReplacement(e) {
     const file = e.target.files[0];
     if (!file || !activeBoxElement) return;
     const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
-    // If PDF replace: behave like main upload (split pages)
     if (file.type === 'application/pdf') {
-        handlePdfFile(file);
-        // Remove the old entry
-        deleteFileFromModal();
-        e.target.value = null;
+        // Handle PDF replacement with an alert to confirm the action
+        if (confirm(`Replacing a single box with a PDF will fill subsequent boxes starting at Box ${divisionNumber}. Continue?`)) {
+            placePdfFileStartingAtBox(file, divisionNumber);
+            e.target.value = null;
+            closeModal();
+        } else {
+            e.target.value = null;
+        }
         return;
     }
-    // otherwise image
-    // INSTANTLY RESERVE SLOT BEFORE ASYNC RENDER
     boxFileMap.set(divisionNumber, file);
     activeBoxElement.dataset.fileName = file.name;
 
@@ -609,7 +722,6 @@ function handleModalFileReplacement(e) {
         openEditingModal('🔄 Replace File');
         e.target.value = null;
     }).catch(() => {
-        // Handle failure by cleaning up the slot
         boxFileMap.delete(divisionNumber);
         delete activeBoxElement.dataset.fileName;
         alert(`Failed to replace file with ${file.name}.`);
@@ -619,27 +731,11 @@ function handleModalFileReplacement(e) {
 
 window.deleteFileFromModal = function() { 
     if (!activeBoxElement) return;
-    const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
-    const colorClasses = ['color-a','color-b','color-c','color-d'];
-    const colorIndex = (divisionNumber - 1) % colorClasses.length;
-    activeBoxElement.classList.remove('filled-state');
-    activeBoxElement.classList.add('empty-state', colorClasses[colorIndex]);
-    activeBoxElement.innerHTML = `<span>Page ${divisionNumber}</span>`;
-    activeBoxElement.style.backgroundImage = 'none';
-    delete activeBoxElement.dataset.fileName;
-    delete activeBoxElement.dataset.brightness;
-    delete activeBoxElement.dataset.contrast;
-    delete activeBoxElement.dataset.filter;
-    delete activeBoxElement.dataset.cropWidth;
-    delete activeBoxElement.dataset.cropHeight;
-    activeBoxElement.style.width = '';
-    activeBoxElement.style.height = '';
-    activeBoxElement.style.flexShrink = '';
-    boxFileMap.delete(divisionNumber);
+    deleteFileFromBox(activeBoxElement);
     closeModal();
 }
 
-/* ---------- Render files (images & PDFs) - Uses Unified High Quality Scale ---------- */
+/* ---------- Render files (images & PDFs) ---------- */
 async function renderFileInBox(boxElement, fileOrEntry) {
     return new Promise((resolve, reject) => {
         boxElement.innerHTML = '';
@@ -649,7 +745,6 @@ async function renderFileInBox(boxElement, fileOrEntry) {
         boxElement.style.backgroundImage = 'none';
         boxElement.style.position = 'relative';
 
-        // restore saved size if it exists
         if (boxElement.dataset.cropWidth && boxElement.dataset.cropHeight) {
             boxElement.style.width = `${boxElement.dataset.cropWidth}px`;
             boxElement.style.height = `${boxElement.dataset.cropHeight}px`;
@@ -661,50 +756,46 @@ async function renderFileInBox(boxElement, fileOrEntry) {
         }
 
         const fileNameSpan = document.createElement('span');
+        fileNameSpan.classList.add('file-name-overlay'); 
         fileNameSpan.style.cssText = 'position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.5); color:white; padding:1px 4px; font-size:8px; z-index:10;';
 
-        // If it's a PDF page entry
         if (isPdfPageEntry(fileOrEntry)) {
-            const pdf = fileOrEntry.pdf;
+            // Retrieve PDF object from the global map
+            const pdf = loadedPDFs.get(fileOrEntry.pdfId);
             const pageNum = fileOrEntry.pageNumber;
             fileNameSpan.textContent = fileOrEntry.name || (`PDF page ${pageNum}`);
-            
-            // UNIFIED MAX QUALITY: Always use the high quality scale (4.0)
-            const finalScaleFactor = PDF_PRINT_QUALITY_SCALE;
+            boxElement.innerHTML = '<span style="color:#f39c12; font-size: 0.9em;">Loading PDF Page...</span>';
+
+            if (!pdf) {
+                boxElement.innerHTML = `<span>Error: PDF ID ${fileOrEntry.pdfId} missing.</span>`;
+                reject(new Error(`PDF document not found for ID: ${fileOrEntry.pdfId}`));
+                return;
+            }
+
+            // Use CURRENT_RENDER_SCALE for screen rendering
+            const finalScaleFactor = CURRENT_RENDER_SCALE; 
 
             pdf.getPage(pageNum).then(page => {
-                
-                // 1. Get the page's natural dimensions at scale 1
                 const pageViewport1 = page.getViewport({ scale: 1 });
-                
-                // 2. Get the current box's width in screen pixels (the target display size)
-                const boxWidthPx = Math.max(10, boxElement.clientWidth || 200); 
-
-                // 3. Calculate scale to fit the box width.
+                const boxWidthPx = Math.max(10, boxElement.clientWidth || 200);
                 const baseScaleToFit = boxWidthPx / pageViewport1.width;
-
-                // 4. Apply the chosen scale factor for the final rendering resolution.
-                const finalScale = baseScaleToFit * finalScaleFactor; 
+                const finalScale = baseScaleToFit * finalScaleFactor;
 
                 const viewport = page.getViewport({ scale: finalScale });
 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
-                
-                // 5. Set the canvas's actual pixel dimensions (always high resolution)
-                canvas.width = Math.round(viewport.width); 
-                canvas.height = Math.round(viewport.height); 
 
-                // 6. Set the CSS size to 100% of the container (the box). This is the key:
-                // The high-res canvas is rendered, but the CSS shrinks it to fit the box size, 
-                // resulting in a visually high-quality, sharp preview.
+                canvas.width = Math.round(viewport.width);
+                canvas.height = Math.round(viewport.height);
+
                 canvas.style.width = '100%';
                 canvas.style.height = '100%';
 
+                boxElement.innerHTML = ''; // Clear loading indicator
+
                 const renderContext = { canvasContext: context, viewport: viewport };
                 page.render(renderContext).promise.then(() => {
-                    // Check if the box is still active before appending (prevents race conditions)
-                    if (boxElement.contains(canvas)) return; 
                     boxElement.appendChild(canvas);
                     boxElement.appendChild(fileNameSpan);
                     resolve();
@@ -719,7 +810,6 @@ async function renderFileInBox(boxElement, fileOrEntry) {
             return;
         }
 
-        // Otherwise expect an image File
         const file = fileOrEntry;
         if (file && file.type && file.type.startsWith('image/')) {
             const reader = new FileReader();
@@ -738,7 +828,6 @@ async function renderFileInBox(boxElement, fileOrEntry) {
             return;
         }
 
-        // Fallback: show unsupported
         fileNameSpan.textContent = fileOrEntry.name || 'Unsupported';
         boxElement.innerHTML = `<span>File: ${fileOrEntry.name || 'Unsupported Preview'}</span>`;
         boxElement.appendChild(fileNameSpan);
@@ -746,8 +835,7 @@ async function renderFileInBox(boxElement, fileOrEntry) {
     });
 }
 
-
-/* ---------- Drag & Drop and Box interactions ---------- */
+/* ---------- Drag & Drop and Box interactions (kept as original) ---------- */
 function handleDragOver(e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) e.currentTarget.style.border = '2px solid blue'; }
 function handleDragLeave(e) { e.currentTarget.style.border = '1px dashed #ccc'; }
 function handleDrop(e) {
@@ -758,19 +846,14 @@ function handleDrop(e) {
         const file = files[0];
         const boxElement = e.currentTarget;
         const divisionNumber = parseInt(boxElement.id.split('-')[2]);
-        // If drop onto specific box, we want to render into that box directly.
-        // For PDFs dropped onto a specific box, place successive PDF pages starting at this box position.
         if (file.type === 'application/pdf') {
             placePdfFileStartingAtBox(file, divisionNumber);
         } else if (file.type.startsWith('image/')) {
-            // render single image into the clicked box
-            // INSTANTLY RESERVE SLOT
             boxFileMap.set(divisionNumber, file);
             boxElement.dataset.fileName = file.name;
 
             renderFileInBox(boxElement, file).catch(err => {
                 console.error(err);
-                // On render failure, free slot
                 boxFileMap.delete(divisionNumber);
                 delete boxElement.dataset.fileName;
             });
@@ -785,7 +868,7 @@ function handleBoxClick(e) {
     if (e.button === 0 && box.dataset.fileName) { activeBoxElement = box; openEditingModal('💡 Photo Adjust'); }
 }
 
-/* ---------- Page & Grid functions ---------- */
+/* ---------- Page & Grid functions (kept as original) ---------- */
 function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
     const boxWInput = document.getElementById('box-width');
     const boxHInput = document.getElementById('box-height');
@@ -797,10 +880,19 @@ function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
         return;
     }
     const size = PAPER_SIZES[paperSizeKey];
+    let printableWidth = size.w;
+    let printableHeight = size.h;
+
+    if (currentOrientation === 'landscape') {
+        printableWidth = size.h;
+        printableHeight = size.w;
+    }
+
     const totalHorizontalMargin = marginLeft + marginRight;
     const totalVerticalMargin = marginTop + marginBottom;
-    const printableWidth = size.w - totalHorizontalMargin;
-    const printableHeight = size.h - totalVerticalMargin;
+    printableWidth -= totalHorizontalMargin;
+    printableHeight -= totalVerticalMargin;
+
     let newWidth = (printableWidth - (currentLayout.cols - 1) * currentColGap) / currentLayout.cols;
     let newHeight = (printableHeight - (currentLayout.rows - 1) * currentRowGap) / currentLayout.rows;
     currentBoxWidth = Math.max(1, newWidth);
@@ -809,6 +901,8 @@ function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
     boxHInput.value = currentBoxHeight.toFixed(1);
     boxWInput.setAttribute('data-calculated','true');
     boxHInput.setAttribute('data-calculated','true');
+
+    document.getElementById('add-page-btn').textContent = `➕ Add Empty Page (${currentLayout.boxesPerPage} Divisions)`;
 }
 function applyGridStyles(container) {
     container.style.padding = `${marginTop}mm ${marginRight}mm ${marginBottom}mm ${marginLeft}mm`;
@@ -822,6 +916,7 @@ function createPage(pageIndex){
   const pageDiv = document.createElement('div');
   pageDiv.classList.add(`${currentPaperSize}-page`, 'paper');
   pageDiv.id = `page-${pageIndex}`;
+  if (currentOrientation === 'landscape') pageDiv.classList.add('landscape');
   if (document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') pageDiv.classList.add('hidden');
 
   const gridContainer = document.createElement('div');
@@ -841,13 +936,17 @@ function createPage(pageIndex){
       box.addEventListener('drop', handleDrop);
       box.addEventListener('click', handleBoxClick);
       box.addEventListener('contextmenu', handleBoxClick);
+      
+      // Re-render existing content if available
       if (boxFileMap.has(nextDivisionNumber)) {
           const file = boxFileMap.get(nextDivisionNumber);
           box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${nextDivisionNumber}`);
           box.classList.remove('empty-state', colorClasses[colorIndex]);
           box.classList.add('filled-state');
-          renderFileInBox(box, file);
+          // No need to wait for rendering here, it will be done asynchronously
+          renderFileInBox(box, file).catch(err => console.error('Initial render error:', err)); 
       }
+      
       gridContainer.appendChild(box);
       nextDivisionNumber++;
   }
@@ -878,7 +977,7 @@ window.resetPaper = function(){
           box.classList.remove('empty-state', colorClasses[colorIndex]);
           box.classList.add('filled-state');
           box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${divisionNumber}`);
-          renderPromises.push(renderFileInBox(box, file));
+          renderPromises.push(renderFileInBox(box, file).catch(() => {})); // Push promise, ignore errors to continue loading
       }
   }
   Promise.all(renderPromises).then(hideContextMenu).catch(()=>hideContextMenu());
@@ -921,6 +1020,52 @@ function handlePaperSizeChange(newSize) {
     document.getElementById('box-height').setAttribute('data-calculated','true');
     resetPaper();
 }
+function handleDivisionChange(newDivision) {
+    currentDivision = newDivision;
+    currentLayout = DIVISION_LAYOUTS[newDivision];
+    isCustomSize = false;
+    document.getElementById('box-width').setAttribute('data-calculated','true');
+    document.getElementById('box-height').setAttribute('data-calculated','true');
+    updateUploadModes(newDivision);
+    resetPaper();
+}
+function handleOrientationChange(newOrientation) {
+    currentOrientation = newOrientation;
+    isCustomSize = false;
+    document.getElementById('box-width').setAttribute('data-calculated','true');
+    document.getElementById('box-height').setAttribute('data-calculated','true');
+    resetPaper();
+}
+
+function updateUploadModes(division) {
+    const allModes = document.querySelectorAll('#upload-mode-controls label');
+    let serialChecked = false;
+
+    allModes.forEach(label => {
+        const supportedDivisions = label.dataset.division.split(',');
+        const isSupported = supportedDivisions.includes(division);
+        label.style.display = isSupported ? 'flex' : 'none';
+
+        if (isSupported) {
+            const radio = label.querySelector('input[type="radio"]');
+            if (radio.value === uploadMode) {
+                radio.checked = true;
+                serialChecked = true;
+            } else if (radio.value === 'serial' && !serialChecked) {
+                radio.checked = true;
+                uploadMode = 'serial';
+                serialChecked = true;
+            }
+        }
+    });
+
+    const currentModeSupported = document.querySelector(`#upload-mode-controls input[value="${uploadMode}"]`)?.closest('label')?.style.display === 'flex';
+    if (!currentModeSupported) {
+        document.querySelector(`#upload-mode-controls input[value="serial"]`).checked = true;
+        uploadMode = 'serial';
+    }
+}
+
 window.addNewPage = function() {
     currentPageIndex++;
     createPage(currentPageIndex);
@@ -928,12 +1073,11 @@ window.addNewPage = function() {
     if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') newPage.classList.add('hidden');
 }
 
-/* ---------- Upload Mode logic ---------- */
-// Use the boxFileMap as the source of truth for filled slots in serial mode
+/* ---------- Upload Mode logic (kept as original) ---------- */
 function getNextSerialBoxID() {
     for (let i=1;i<nextDivisionNumber;i++){
         const box = document.getElementById(`box-div-${i}`);
-        if (box && !boxFileMap.has(i)) return i; // Check map for instant reservation
+        if (box && !boxFileMap.has(i)) return i;
     }
     return nextDivisionNumber;
 }
@@ -942,30 +1086,60 @@ function getInterleavedID(mode) {
     currentInterleavedFileIndex++;
     const BPP = currentLayout.boxesPerPage;
     const F = currentInterleavedFileIndex;
-    const block = 2 * BPP;
-    const blockIndex = Math.floor((F - 1) / block);
-    const blockBaseID = blockIndex * block + 1;
-    const F_g = F - (blockIndex * block);
     let targetID;
-    if (F_g % 2 === 1) {
-        targetID = blockBaseID + (F_g + 1)/2 - 1;
-    } else {
-        const B_on_page = F_g / 2;
-        if (mode === 'interleaved-standard') {
-            const pageTwoBase = blockBaseID + BPP;
-            targetID = pageTwoBase + B_on_page - 1;
-        } else if (mode === 'interleaved-custom') {
-            const boxIDInBlock = PAGE_TWO_CUSTOM_ORDER_OFFSET[B_on_page - 1];
-            targetID = blockBaseID + boxIDInBlock - 1;
+
+    if (currentDivision === '4') {
+        const block = 2 * BPP;
+        const blockIndex = Math.floor((F - 1) / block);
+        const blockBaseID = blockIndex * block + 1;
+        const F_g = F - (blockIndex * block);
+
+        if (F_g % 2 === 1) {
+            targetID = blockBaseID + (F_g + 1)/2 - 1;
+        } else {
+            const B_on_page = F_g / 2;
+            if (mode === 'interleaved-standard') {
+                const pageTwoBase = blockBaseID + BPP;
+                targetID = pageTwoBase + B_on_page - 1;
+            } else if (mode === 'interleaved-custom') {
+                const PAGE_TWO_CUSTOM_ORDER_OFFSET = [6,5,8,7];
+                const boxIDInBlock = PAGE_TWO_CUSTOM_ORDER_OFFSET[B_on_page - 1];
+                targetID = blockBaseID + boxIDInBlock - 1;
+            }
         }
+        return targetID;
+    } else if (currentDivision === '2' && mode === 'interleaved-A') {
+        const blockCycle = F % 4;
+        const cycleBase = F - (blockCycle || 4);
+        if (blockCycle === 1) targetID = cycleBase + 1;
+        else if (blockCycle === 2) targetID = cycleBase + 3;
+        else if (blockCycle === 3) targetID = cycleBase + 2;
+        else if (blockCycle === 0) targetID = cycleBase + 4;
+        return targetID;
     }
-    return targetID;
+
+    return getNextSerialBoxID();
 }
 
 function getNextTargetBoxID() {
-    if (uploadMode === 'serial') { currentInterleavedFileIndex = 0; return getNextSerialBoxID(); }
-    else return getInterleavedID(uploadMode);
+    if (currentDivision === '1') {
+        uploadMode = 'serial';
+        document.querySelector(`#upload-mode-controls input[value="serial"]`).checked = true;
+    }
+
+    if (uploadMode === 'serial') {
+        currentInterleavedFileIndex = 0;
+        return getNextSerialBoxID();
+    } else {
+        let filledCount = 0;
+        for (let i = 1; i < nextDivisionNumber; i++) {
+            if (boxFileMap.has(i)) filledCount++;
+        }
+        currentInterleavedFileIndex = filledCount;
+        return getInterleavedID(uploadMode);
+    }
 }
+
 function checkAndCreatePages(requiredID) {
   while (requiredID >= nextDivisionNumber) {
       currentPageIndex++;
@@ -975,9 +1149,7 @@ function checkAndCreatePages(requiredID) {
   }
 }
 
-/* ---------- Handling uploaded files ---------- */
-
-/* handle multi-file uploads (now handles single files too) */
+/* ---------- File upload handlers (OPTIMIZED FOR PDF SPEED) ---------- */
 function handleMultiPhotoUpload(files){
     if (!files || files.length === 0) return;
     Array.from(files).forEach(f => {
@@ -987,11 +1159,9 @@ function handleMultiPhotoUpload(files){
     });
 }
 
-/* handle a normal image File into the next target slot */
 function handleFile(file) {
     const targetID = getNextTargetBoxID();
 
-    // Interleaved check (only needed for interleaved modes)
     if (uploadMode !== 'serial' && boxFileMap.has(targetID)) {
         alert(`File ${file.name} skipped: The next calculated slot (Box ${targetID}) is already filled. Use Serial mode or delete existing content.`);
         currentInterleavedFileIndex--;
@@ -1001,16 +1171,13 @@ function handleFile(file) {
     checkAndCreatePages(targetID);
     const box = document.getElementById(`box-div-${targetID}`);
     if (box) {
-        // INSTANTLY RESERVE SLOT (Key fix for multi-upload sync)
-        boxFileMap.set(targetID, file); 
+        boxFileMap.set(targetID, file);
         box.dataset.fileName = file.name;
-        
+
         renderFileInBox(box, file).catch(error => {
-            // Failure cleanup
             console.error(`Error rendering file ${file.name} in box ${targetID}:`, error);
             alert(`Could not display ${file.name}. Check console for details.`);
             box.innerHTML = `<span>Error: ${file.name}</span>`;
-            // On failure, free the slot
             boxFileMap.delete(targetID);
             delete box.dataset.fileName;
             if (uploadMode !== 'serial') currentInterleavedFileIndex--;
@@ -1018,48 +1185,53 @@ function handleFile(file) {
     }
 }
 
-
-/* ---------- Handle an uploaded PDF file: ---------- */
 function handlePdfFile(file) {
-    // Read as ArrayBuffer once
     const reader = new FileReader();
     reader.onload = function(ev) {
         const arrayBuffer = ev.target.result;
-        // Load PDF once (pass raw ArrayBuffer)
+        
+        // 1. Get a unique ID for this PDF
+        const pdfId = nextPdfId++;
+        
+        // 2. Start loading the PDF document (this is asynchronous)
         pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(pdfDoc => {
+            // 3. Store the loaded PDF document in the global map for later use
+            loadedPDFs.set(pdfId, pdfDoc);
             const total = pdfDoc.numPages;
-            // For each page create an entry and place in slots
+
+            // 4. ***OPTIMIZATION: Synchronously map pages to boxes for instant upload speed***
             for (let p = 1; p <= total; p++) {
-                // compute the next slot now (so multi-page PDF follows Upload Mode mapping)
                 const targetID = getNextTargetBoxID();
-                // If slot filled in interleaved mode, bail gracefully (adjust index)
                 if (uploadMode !== 'serial' && boxFileMap.has(targetID)) {
-                    // If occupied, step back interleaved counter and skip placing this page
                     currentInterleavedFileIndex--;
                     continue;
                 }
                 checkAndCreatePages(targetID);
                 const box = document.getElementById(`box-div-${targetID}`);
                 if (!box) continue;
-                // create pdfPageEntry referencing the loaded pdfDoc
+                
+                // Store only the PDF ID and page number in the boxFileMap
                 const entry = {
                     kind: 'pdfpage',
-                    pdf: pdfDoc,            // PDFDocumentProxy from pdf.js (reused safely)
+                    pdfId: pdfId, // Store ID instead of object
                     pageNumber: p,
                     name: `${file.name} (p${p})`,
                     origName: file.name
                 };
-                // store entry and render (reservation is here, before async renderFileInBox)
                 boxFileMap.set(targetID, entry);
-                // set box dataset filename for UI & persist
                 box.dataset.fileName = entry.name;
-                // render using the UNIFIED MAX QUALITY SCALE
+                
+                // 5. Render asynchronously - this part is the only one that takes time, but the map is updated instantly.
+                // We don't wait for the render.
                 renderFileInBox(box, entry).catch(err => console.error('PDF page render error:', err));
             }
         }).catch(err => {
             alert('Failed to parse PDF: ' + err.message);
             console.error(err);
         });
+        
+        document.getElementById('multi-upload-btn').textContent = `...Loading PDF ${file.name}...`;
+
     };
     reader.onerror = function(err) {
         alert('Failed to read PDF file.');
@@ -1068,36 +1240,38 @@ function handlePdfFile(file) {
     reader.readAsArrayBuffer(file);
 }
 
-/* ---------- Utility: if user drags PDF onto a specific box we want to start placing pages there ---------- */
 function placePdfFileStartingAtBox(file, startBoxId) {
-    // read arrayBuffer once then getDocument and then place pages starting at that box
     const reader = new FileReader();
     reader.onload = function(ev) {
         const arrayBuffer = ev.target.result;
+        const pdfId = nextPdfId++;
+        
         pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(pdfDoc => {
+            loadedPDFs.set(pdfId, pdfDoc);
             let pointer = startBoxId;
             const total = pdfDoc.numPages;
-            
-            // Clear existing content from the start box onwards for a clean place operation
+
+            // 1. Delete existing files from startBoxId onwards
             for(let i=startBoxId; i < nextDivisionNumber; i++){
                 const existingBox = document.getElementById(`box-div-${i}`);
-                if(existingBox) deleteFileFromBox(existingBox); // Use a cleaner helper function
+                if(existingBox && boxFileMap.has(i)) deleteFileFromBox(existingBox);
             }
-            
+
+            // 2. Synchronously map new PDF pages
             for (let p = 1; p <= total; p++) {
                 checkAndCreatePages(pointer);
                 const box = document.getElementById(`box-div-${pointer}`);
                 if (!box) { pointer++; continue; }
                 const entry = {
                     kind: 'pdfpage',
-                    pdf: pdfDoc,
+                    pdfId: pdfId, // Store ID instead of object
                     pageNumber: p,
                     name: `${file.name} (p${p})`,
                     origName: file.name
                 };
                 boxFileMap.set(pointer, entry);
                 box.dataset.fileName = entry.name;
-                // render using the UNIFIED MAX QUALITY SCALE
+                // Render asynchronously
                 renderFileInBox(box, entry).catch(err => console.error('PDF page render error:', err));
                 pointer++;
             }
@@ -1127,6 +1301,8 @@ function deleteFileFromBox(boxElement) {
     boxElement.style.height = '';
     boxElement.style.flexShrink = '';
     boxFileMap.delete(divisionNumber);
+    // Note: We intentionally DO NOT delete the PDF object from loadedPDFs 
+    // unless ALL of its pages are deleted, to allow for faster re-upload/replacement.
 }
 window.deleteFile = function() {
     if (activeBoxElement) {
@@ -1135,8 +1311,237 @@ window.deleteFile = function() {
     }
 }
 
+/* ---------- Save As File Function (Optimized for ULTIMATE Quality) ---------- */
+window.saveSheetsAsFile = async function() {
+    const saveType = document.getElementById('save-as-type-select').value;
+    const saveQualitySelect = document.getElementById('save-quality-select');
+    const paperWrapper = document.getElementById('page-wrapper');
+    const controlsContainer = document.getElementById('controls-panel-container');
+    const saveBtn = document.getElementById('save-sheets-btn');
+    const selectedQualityScale = saveQualitySelect.value;
+    const CAPTURE_SCALE = parseFloat(selectedQualityScale);
+    const qualityText = saveQualitySelect.options[saveQualitySelect.selectedIndex].textContent;
 
-/* ---------- Misc UI helpers ---------- */
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `⏱️ Processing (${qualityText})...`;
+
+    /*after save file name*/ const fileName = `All-in-one-minimize`;
+    let wasControlsOpen = false;
+    if (!controlsContainer.classList.contains('hidden')) {
+        controlsContainer.classList.add('hidden');
+        wasControlsOpen = true;
+    }
+    
+    // Hide file name overlays before capture
+    paperWrapper.classList.add('hide-overlays');
+
+    // **Temporary: Check for any un-rendered PDF pages and force re-render with FINAL_SAVE_QUALITY_SCALE before capture**
+    // This is the most crucial part for maximum quality saving.
+    const allBoxes = document.querySelectorAll('#page-wrapper .box');
+    let needsReRender = false;
+    
+    for (const box of allBoxes) {
+        const divisionNumber = parseInt(box.id.split('-')[2]);
+        const entry = boxFileMap.get(divisionNumber);
+        if (isPdfPageEntry(entry)) {
+            // Check if the current canvas quality is lower than the save quality
+            const currentScale = parseFloat(box.querySelector('canvas')?.dataset.renderScale || 0);
+            if (currentScale < CAPTURE_SCALE) {
+                needsReRender = true;
+                break;
+            }
+        }
+    }
+    
+    if (needsReRender) {
+        saveBtn.innerHTML = `⏱️ Preparing final quality renders...`;
+        // Temporarily set render scale to capture scale for all PDF/Canvas elements
+        // The renderFileInBox function will use this scale
+        const originalRenderScale = CURRENT_RENDER_SCALE;
+        CURRENT_RENDER_SCALE = CAPTURE_SCALE;
+
+        const reRenderPromises = [];
+        for (const box of allBoxes) {
+            const divisionNumber = parseInt(box.id.split('-')[2]);
+            const entry = boxFileMap.get(divisionNumber);
+            if (isPdfPageEntry(entry)) {
+                 // Force re-render the PDF box with the new CAPTURE_SCALE
+                 reRenderPromises.push(renderFileInBox(box, entry).catch(() => {}));
+            }
+        }
+        await Promise.all(reRenderPromises);
+        
+        // Restore original render scale
+        CURRENT_RENDER_SCALE = originalRenderScale;
+    }
+
+
+    try {
+        if (saveType === 'doc' || saveType === 'docx') {
+            const fileContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>${fileName}</title>
+                    <meta name="viewport" content="width=device-width,initial-scale=1">
+                    <style>
+                        .paper {
+                            width: ${currentOrientation === 'landscape' ? PAPER_SIZES[currentPaperSize].h : PAPER_SIZES[currentPaperSize].w}mm;
+                            min-height: ${currentOrientation === 'landscape' ? PAPER_SIZES[currentPaperSize].w : PAPER_SIZES[currentPaperSize].h}mm;
+                            margin: 0 auto 20px;
+                            box-shadow: none;
+                            border: 1px solid #ccc;
+                            padding: 10mm;
+                            box-sizing: border-box;
+                            page-break-after: always;
+                        }
+                        .box { border: 1px solid #eee; min-height: 100px; padding: 5px; margin-bottom: 5px; }
+                        .box canvas { display: none; }
+                        .box img { max-width: 100%; height: auto; display: block; }
+                        @page { margin: 1in; }
+                    </style>
+                </head>
+                <body>
+                    <h1>${fileName} - Saved as Editable HTML (${saveType.toUpperCase()})</h1>
+                    <p>Note: This file was saved as HTML with the .${saveType} extension. Layout precision depends on the word processor's HTML rendering.</p>
+                    ${paperWrapper.innerHTML}
+                </body>
+                </html>
+            `;
+            const blob = new Blob([fileContent], { type: "application/msword" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${fileName}.${saveType}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert(`Sheets saved as ${saveType.toUpperCase()}.`);
+            return;
+        }
+
+        if (saveType === 'png' || saveType === 'jpg') {
+            saveBtn.innerHTML = `⏱️ Capturing image...`;
+            // Use CAPTURE_SCALE (2.5x, 4.0x, or 6.0x) for quality save
+            const canvas = await html2canvas(paperWrapper, {
+                scale: CAPTURE_SCALE, 
+                allowTaint: true,
+                useCORS: true,
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: paperWrapper.scrollWidth,
+                windowHeight: paperWrapper.scrollHeight
+            });
+
+            let downloadURL = null;
+            let extension = '';
+
+            if (saveType === 'png') {
+                downloadURL = canvas.toDataURL('image/png');
+                extension = 'png';
+            } else if (saveType === 'jpg') {
+                downloadURL = canvas.toDataURL('image/jpeg', 1.0);
+                extension = 'jpg';
+            }
+
+            if (downloadURL) {
+                const a = document.createElement('a');
+                a.href = downloadURL;
+                a.download = `${fileName}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                alert(`Sheets saved as ${extension.toUpperCase()} image.`);
+            } else {
+                alert('Failed to generate image.');
+            }
+            return;
+        }
+
+        if (saveType === 'pdf') {
+            saveBtn.innerHTML = `⏱️ Creating final PDF...`;
+            const { jsPDF } = window.jspdf;
+
+            const paperElements = document.querySelectorAll('#page-wrapper .paper:not(.hidden)');
+            if (paperElements.length === 0) {
+                alert('No sheets visible to save.');
+                return;
+            }
+
+            let pdf = null;
+            for (let idx = 0; idx < paperElements.length; idx++) {
+                const paper = paperElements[idx];
+                const rect = paper.getBoundingClientRect();
+                
+                saveBtn.innerHTML = `⏱️ Processing Page ${idx + 1} of ${paperElements.length}...`;
+
+                const canvas = await html2canvas(paper, {
+                    scale: CAPTURE_SCALE,
+                    allowTaint: true,
+                    useCORS: true,
+                    backgroundColor: null,
+                    width: Math.ceil(rect.width),
+                    height: Math.ceil(rect.height),
+                    windowWidth: document.documentElement.clientWidth,
+                    windowHeight: document.documentElement.clientHeight,
+                    scrollX: -window.scrollX - rect.left,
+                    scrollY: -window.scrollY - rect.top
+                });
+
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+
+                const baseSize = PAPER_SIZES[currentPaperSize];
+                let pdfWidthMM = baseSize.w;
+                let pdfHeightMM = baseSize.h;
+                let orientation = 'portrait';
+                if (paper.classList.contains('landscape')) {
+                    orientation = 'landscape';
+                    pdfWidthMM = baseSize.h;
+                    pdfHeightMM = baseSize.w;
+                }
+
+                if (!pdf) {
+                    pdf = new jsPDF({
+                        orientation: orientation,
+                        unit: 'mm',
+                        format: [pdfWidthMM, pdfHeightMM]
+                    });
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidthMM, pdfHeightMM, undefined, 'FAST');
+                } else {
+                    pdf.addPage([pdfWidthMM, pdfHeightMM], orientation.toLowerCase());
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidthMM, pdfHeightMM, undefined, 'FAST');
+                }
+            }
+
+            if (pdf) {
+                pdf.save(`${fileName}.pdf`);
+                alert(`Sheets successfully saved as multi-page PDF!`);
+            } else {
+                alert('Failed to create PDF.');
+            }
+            return;
+        }
+    } catch (err) {
+        console.error("Error during file saving:", err);
+        alert('An unexpected error occurred while saving. Check console for details.');
+    } finally {
+        // Show overlays again
+        paperWrapper.classList.remove('hide-overlays');
+
+        // Force a re-render of all elements to revert to CURRENT_RENDER_SCALE for screen viewing
+        if (needsReRender) {
+             resetPaper(); 
+        }
+
+        if (wasControlsOpen) controlsContainer.classList.remove('hidden');
+        saveBtn.disabled = false;
+        updateSaveButtonText();
+    }
+};
+
+/* ---------- Misc helpers (kept as original) ---------- */
 function toggleControls(){
   const panel = document.getElementById('controls-panel-container');
   panel.classList.toggle('hidden');
@@ -1156,48 +1561,60 @@ function toggleBackground(){
   document.getElementById('toggle-bg-btn').textContent = document.body.classList.contains('bg-image') ? '💧 Show Gradient Background' : '🌈 Show Background Image';
 }
 
-function attachLiveListeners() {
-    ['margin-top','margin-bottom','margin-left','margin-right'].forEach(id => document.getElementById(id).addEventListener('input', updateMargins));
-    ['box-width','box-height'].forEach(id => document.getElementById(id).addEventListener('input', updateDivisionSize));
-    ['row-gap-input','col-gap-input'].forEach(id => document.getElementById(id).addEventListener('input', updateGapSizes));
+function handleQualityChange(newScale) {
+    CURRENT_RENDER_SCALE = parseFloat(newScale);
+    resetPaper(); // Re-render all canvases with the new scale
 }
 
-/* ---------- Init ---------- */
-document.addEventListener('DOMContentLoaded', ()=> {
-  document.getElementById('togglePaperBtn').textContent = 'Show Screen Paper';
-  marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
-  marginBottom = parseFloat(document.getElementById('margin-bottom').value) || 0;
-  marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
-  marginRight = parseFloat(document.getElementById('margin-right').value) || 0;
-  currentColGap = parseFloat(document.getElementById('col-gap-input').value) || 0;
-  currentRowGap = parseFloat(document.getElementById('row-gap-input').value) || 0;
-  attachLiveListeners();
-  calculateConstrainedBoxSize();
-  document.getElementById('toggle-controls-btn').addEventListener('click', toggleControls);
-  document.getElementById('toggle-bg-btn').addEventListener('click', toggleBackground);
-  document.getElementById('togglePaperBtn').addEventListener('click', togglePaper);
-  document.getElementById('paper-size-select').addEventListener('change', (e) => handlePaperSizeChange(e.target.value));
-  document.querySelectorAll('input[name="uploadMode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            uploadMode = e.target.value;
-            // When switching to interleaved mode, reset counter based on filled boxes count
-            if (uploadMode !== 'serial') {
-                const filledBoxes = document.querySelectorAll('.box[data-file-name]').length;
-                currentInterleavedFileIndex = filledBoxes;
-            } else currentInterleavedFileIndex = 0; // When switching to serial, reset counter to 0
-            alert(`Switched to ${uploadMode.replace(/-/g, ' ').toUpperCase()} mode.`);
-        });
-  });
-  resetPaper();
-  const multiFileInput = document.getElementById('multi-file-input');
-  document.getElementById('multi-upload-btn').addEventListener('click', ()=> multiFileInput.click());
-  multiFileInput.addEventListener('change', (ev)=>{ handleMultiPhotoUpload(ev.target.files); ev.target.value = null; });
+function updateSaveButtonText() {
+    const saveQualitySelect = document.getElementById('save-quality-select');
+    const selectedQualityScale = saveQualitySelect.value;
+    const optionText = saveQualitySelect.options[saveQualitySelect.selectedIndex].textContent;
+    const match = optionText.match(/\((.*?)\)/); // Extract scale from text
+    const displayScale = match ? match[1] : `${selectedQualityScale}x`;
+    document.getElementById('save-sheets-btn').innerHTML = `💾 Start Save(${displayScale})`;
+}
 
-  document.getElementById('edit-modal').addEventListener('click', (e) => { if (e.target.id === 'edit-modal') closeModal(); });
-  document.addEventListener('click', (e) => { const contextMenu = document.getElementById('context-menu'); if (contextMenu.style.display === 'block' && !contextMenu.contains(e.target)) hideContextMenu(); });
+function attachLiveListeners() {
+    ['margin-top','margin-bottom','margin-left','margin-right'].forEach(id => document.getElementById(id)?.addEventListener('change', updateMargins));
+    ['box-width','box-height'].forEach(id => document.getElementById(id)?.addEventListener('change', updateDivisionSize));
+    ['row-gap-input','col-gap-input'].forEach(id => document.getElementById(id)?.addEventListener('change', updateGapSizes));
+    document.getElementById('paper-size-select')?.addEventListener('change', e => handlePaperSizeChange(e.target.value));
+    document.querySelectorAll('input[name="pageDivision"]').forEach(el => el.addEventListener('change', e => handleDivisionChange(e.target.value)));
+    document.querySelectorAll('input[name="paperOrientation"]').forEach(el => el.addEventListener('change', e => handleOrientationChange(e.target.value)));
+    document.getElementById('multi-upload-btn')?.addEventListener('click', () => document.getElementById('multi-file-input').click());
+    document.getElementById('multi-file-input')?.addEventListener('change', e => handleMultiPhotoUpload(e.target.files));
+    document.querySelectorAll('#upload-mode-controls input[type="radio"]').forEach(r => r.addEventListener('change', e => uploadMode = e.target.value));
+    document.getElementById('toggle-controls-btn')?.addEventListener('click', toggleControls);
+    document.getElementById('toggle-bg-btn')?.addEventListener('click', toggleBackground);
+    document.getElementById('togglePaperBtn')?.addEventListener('click', togglePaper);
+    
+    // Quality selector listener
+    document.getElementById('quality-select')?.addEventListener('change', e => handleQualityChange(e.target.value));
+    document.getElementById('save-quality-select')?.addEventListener('change', updateSaveButtonText);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    attachLiveListeners();
+    calculateConstrainedBoxSize();
+    
+    // Manually set box size inputs to reflect the calculated full-page size based on A4/portrait/1x1/0 margins
+    document.getElementById('box-width').value = (PAPER_SIZES['a4'].w / DIVISION_LAYOUTS['1'].cols).toFixed(1);
+    document.getElementById('box-height').value = (PAPER_SIZES['a4'].h / DIVISION_LAYOUTS['1'].rows).toFixed(1);
+    
+    // Update Add Page button text to reflect 1 Division
+    document.getElementById('add-page-btn').textContent = `➕ Add Empty Page (${currentLayout.boxesPerPage} Divisions)`;
+
+    // Set initial quality scales and update save button text
+    CURRENT_RENDER_SCALE = SCREEN_MAX_QUALITY_SCALE; // Default for screen is 4.0x
+    document.getElementById('quality-select').value = SCREEN_MAX_QUALITY_SCALE.toString();
+    document.getElementById('save-quality-select').value = DEFAULT_QUALITY_SCALE.toString(); // Default for save is FAST 2.5x
+    updateSaveButtonText();
+
+    // Create two pages by default (keeps your existing behavior)
+    createPage(0);
+    createPage(1);
 });
-
 </script>
 </body>
 </html>
-

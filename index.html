@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>All-in-one-converter</title>
+  <title>All-in-one-minimize</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -49,7 +49,15 @@
     }
     body.bg-gradient { background: linear-gradient(to bottom right, skyblue, #ff4b4b) !important; }
 
-    #page-wrapper { display:flex; flex-direction:column; align-items:flex-start; width:100%; }
+    /* MODIFIED: Added position:relative and z-index: 1 to ensure paper is below the control panel's z-index:10001 */
+    #page-wrapper { 
+        display:flex; 
+        flex-direction:column; 
+        align-items:flex-start; 
+        width:100%; 
+        position: relative; 
+        z-index: 1;
+    }
 
     .a4-page { width:210mm; min-height:297mm; }
     .a5-page { width:148mm; min-height:210mm; }
@@ -102,11 +110,12 @@
 
     .box.filled-state { background-color: #e8f5e9 !important; }
 
-    .controls { padding:10px; background:red; border:1px solid #95a5a6; z-index:10000; max-width:360px;
+    /* MODIFIED: Increased z-index for controls and control panel container to ensure it is on top */
+    .controls { padding:10px; background:red; border:1px solid #95a5a6; z-index:10002; max-width:360px;
       text-align:center; max-height:80vh; overflow-y:auto; overflow-x:hidden;
       box-shadow: 5px 5px 15px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.8);
     }
-    .controls-panel-container { position:fixed; top:20px; right:20px; transition:right 1.10s; }
+    .controls-panel-container { position:fixed; top:20px; right:20px; transition:right 1.10s; z-index:10001; }
     .controls-panel-container.hidden { right:-382px; }
 
     #toggle-controls-btn { position:absolute; top:0; left:-54px; height:68px; width:59px; border:1px solid var(--toggle-controls-border); border-right:10px; background:var(--toggle-controls-bg); color: var(--toggle-controls-icon-color); display:flex; align-items:center; justify-content:center; border-radius:22px 0 0 20px; cursor:pointer; box-shadow:-10px 0 8px rgba(0,0,0,0.1); font-size: 24px; }
@@ -582,6 +591,7 @@ function renderPdfPageInModal(pdf, pageNum, previewContainer) {
         previewContainer.innerHTML = `<div style="color:#ccc">Error loading PDF page: ${err.message}</div>`;
     });
 }
+
 document.getElementById('pdf-prev-btn')?.addEventListener('click', () => {
     if (!modalPdfObj) return;
     if (modalPdfPageNum > 1) {
@@ -629,74 +639,71 @@ function updateModalPreviewImageCrop() {
     preview.style.width = 'auto';
     preview.style.height = 'auto';
     preview.style.maxWidth = '100%';
-    if (currentModalAction === '✂️ Crop Option') {
-         preview.style.width = `${width}px`;
-         preview.style.height = `${height}px`;
-         preview.style.maxWidth = '100%';
+    preview.style.maxHeight = '100%';
+    const img = preview.querySelector('img');
+    if (img) {
+        // Simple visual crop simulation: set the container size
+        // This is primarily for visual feedback in the modal, not the final crop
+        // The final crop is applied by changing the box size on the sheet.
+        const parentRect = preview.getBoundingClientRect();
+        const ratioW = parentRect.width / width;
+        const ratioH = parentRect.height / height;
+        const ratio = Math.min(ratioW, ratioH);
+        
+        preview.style.width = `${width * ratio}px`;
+        preview.style.height = `${height * ratio}px`;
     }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('brightness-input')?.addEventListener('input', updateModalPreviewImageFilter);
-    document.getElementById('contrast-input')?.addEventListener('input', updateModalPreviewImageFilter);
-    document.getElementById('crop-width-input')?.addEventListener('input', updateModalPreviewImageCrop);
-    document.getElementById('crop-height-input')?.addEventListener('input', updateModalPreviewImageCrop);
-});
-
 window.applyImageAdjustments = function() {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) return;
-    const entry = boxFileMap.get(parseInt(activeBoxElement.id.split('-')[2]));
-    if (isPdfPageEntry(entry)) return;
     const brightness = document.getElementById('brightness-input').value;
     const contrast = document.getElementById('contrast-input').value;
     const filterStyle = `brightness(${brightness}%) contrast(${contrast}%)`;
-    updateModalPreviewImageFilter();
-    const boxImg = activeBoxElement.querySelector('img');
-    if (boxImg) boxImg.style.filter = filterStyle;
+    
     activeBoxElement.dataset.brightness = brightness;
     activeBoxElement.dataset.contrast = contrast;
     activeBoxElement.dataset.filter = filterStyle;
+    activeBoxElement.style.filter = filterStyle;
+    
+    closeModal();
 }
 window.resetImageAdjustments = function() {
-    document.getElementById('brightness-input').value = '100';
-    document.getElementById('contrast-input').value = '100';
+    if (!activeBoxElement || !activeBoxElement.dataset.fileName) return;
+    document.getElementById('brightness-input').value = 100;
+    document.getElementById('contrast-input').value = 100;
+    
+    activeBoxElement.dataset.brightness = 100;
+    activeBoxElement.dataset.contrast = 100;
+    activeBoxElement.dataset.filter = 'none';
+    activeBoxElement.style.filter = 'none';
+    
     updateModalPreviewImageFilter();
-    if (activeBoxElement) {
-        const boxImg = activeBoxElement.querySelector('img');
-        if (boxImg) boxImg.style.filter = 'none';
-        delete activeBoxElement.dataset.brightness;
-        delete activeBoxElement.dataset.contrast;
-        delete activeBoxElement.dataset.filter;
-    }
 }
-
 window.applyCrop = function() {
     if (!activeBoxElement || !activeBoxElement.dataset.fileName) return;
-    const entry = boxFileMap.get(parseInt(activeBoxElement.id.split('-')[2]));
-    if (isPdfPageEntry(entry)) return;
     const cropWidth = document.getElementById('crop-width-input').value;
     const cropHeight = document.getElementById('crop-height-input').value;
-    updateModalPreviewImageCrop();
+    
     activeBoxElement.style.width = `${cropWidth}px`;
     activeBoxElement.style.height = `${cropHeight}px`;
-    activeBoxElement.style.flexShrink = '0';
     activeBoxElement.dataset.cropWidth = cropWidth;
     activeBoxElement.dataset.cropHeight = cropHeight;
+    
+    closeModal();
 }
-
 window.closeModal = function() {
     document.getElementById('edit-modal').classList.remove('active');
     const preview = document.getElementById('modal-preview');
     preview.style.width = 'auto';
     preview.style.height = 'auto';
-    setTimeout(() => {
-        document.getElementById('edit-modal').style.display = 'none';
-        activeBoxElement = null;
-        currentModalAction = '';
-        modalPdfObj = null;
-        modalPdfPageNum = 1;
-        modalPdfTotalPages = 1;
-        modalPdfCurrentBoxId = null;
+    setTimeout(() => { 
+        document.getElementById('edit-modal').style.display = 'none'; 
+        activeBoxElement = null; 
+        currentModalAction = ''; 
+        modalPdfObj = null; 
+        modalPdfPageNum = 1; 
+        modalPdfTotalPages = 1; 
+        modalPdfCurrentBoxId = null; 
     }, 300);
 }
 
@@ -704,7 +711,9 @@ window.closeModal = function() {
 function handleModalFileReplacement(e) {
     const file = e.target.files[0];
     if (!file || !activeBoxElement) return;
+
     const divisionNumber = parseInt(activeBoxElement.id.split('-')[2]);
+
     if (file.type === 'application/pdf') {
         // Handle PDF replacement with an alert to confirm the action
         if (confirm(`Replacing a single box with a PDF will fill subsequent boxes starting at Box ${divisionNumber}. Continue?`)) {
@@ -716,9 +725,9 @@ function handleModalFileReplacement(e) {
         }
         return;
     }
+
     boxFileMap.set(divisionNumber, file);
     activeBoxElement.dataset.fileName = file.name;
-
     renderFileInBox(activeBoxElement, file).then(() => {
         openEditingModal('🔄 Replace File');
         e.target.value = null;
@@ -729,67 +738,89 @@ function handleModalFileReplacement(e) {
         closeModal();
     });
 }
-
-window.deleteFileFromModal = function() { 
+window.deleteFileFromModal = function() {
     if (!activeBoxElement) return;
     deleteFileFromBox(activeBoxElement);
     closeModal();
 }
 
+function deleteFile() {
+    if (!activeBoxElement) return;
+    deleteFileFromBox(activeBoxElement);
+    hideContextMenu();
+}
+
+function deleteFileFromBox(boxElement) {
+    const divisionNumber = parseInt(boxElement.id.split('-')[2]);
+    if(isPdfPageEntry(boxFileMap.get(divisionNumber))){
+        // Clear all pdf page entries associated with this PDF ID
+        const pdfIdToDelete = boxFileMap.get(divisionNumber).pdfId;
+        loadedPDFs.delete(pdfIdToDelete);
+
+        for (let i = divisionNumber; i < nextDivisionNumber; i++){
+            const box = document.getElementById(`box-div-${i}`);
+            const entry = boxFileMap.get(i);
+            if(entry && isPdfPageEntry(entry) && entry.pdfId === pdfIdToDelete){
+                 // Clear the box content and data
+                boxFileMap.delete(i);
+                delete box.dataset.fileName;
+                box.innerHTML = `<span>Page ${i}</span>`;
+                box.classList.add('empty-state');
+                box.classList.remove('filled-state');
+                box.style.filter = 'none';
+                box.style.backgroundImage = 'none';
+            }
+        }
+    } else {
+        boxFileMap.delete(divisionNumber);
+        delete boxElement.dataset.fileName;
+        boxElement.innerHTML = `<span>Page ${divisionNumber}</span>`;
+        boxElement.classList.add('empty-state');
+        boxElement.classList.remove('filled-state');
+        boxElement.style.filter = 'none';
+        boxElement.style.backgroundImage = 'none';
+    }
+}
+
 /* ---------- Render files (images & PDFs) ---------- */
 async function renderFileInBox(boxElement, fileOrEntry) {
     return new Promise((resolve, reject) => {
-        boxElement.innerHTML = '';
-        const emptyClasses = ['color-a','color-b','color-c','color-d'];
-        boxElement.classList.remove('empty-state', ...emptyClasses);
-        boxElement.classList.add('filled-state');
-        boxElement.style.backgroundImage = 'none';
+        boxElement.innerHTML = ''; 
+        const emptyClasses = ['color-a','color-b','color-c','color-d']; 
+        boxElement.classList.remove('empty-state', ...emptyClasses); 
+        boxElement.classList.add('filled-state'); 
+        boxElement.style.backgroundImage = 'none'; 
         boxElement.style.position = 'relative';
 
-        if (boxElement.dataset.cropWidth && boxElement.dataset.cropHeight) {
-            boxElement.style.width = `${boxElement.dataset.cropWidth}px`;
-            boxElement.style.height = `${boxElement.dataset.cropHeight}px`;
-            boxElement.style.flexShrink = '0';
-        } else {
-            boxElement.style.width = '';
-            boxElement.style.height = '';
-            boxElement.style.flexShrink = '';
-        }
-
+        // Add file name overlay for better UX
         const fileNameSpan = document.createElement('span');
-        fileNameSpan.classList.add('file-name-overlay'); 
-        fileNameSpan.style.cssText = 'position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.5); color:white; padding:1px 4px; font-size:8px; z-index:10;';
+        fileNameSpan.classList.add('file-name-overlay');
+        fileNameSpan.style.cssText = 'position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.6); color:white; padding:1px 4px; font-size:8px; border-radius:3px; max-width:90%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; z-index:10; pointer-events:none;';
+        
+        // Apply image filter if stored in data attributes
+        boxElement.style.filter = boxElement.dataset.filter || 'none';
 
         if (isPdfPageEntry(fileOrEntry)) {
-            // Retrieve PDF object from the global map
-            const pdf = loadedPDFs.get(fileOrEntry.pdfId);
+            const pdfId = fileOrEntry.pdfId;
             const pageNum = fileOrEntry.pageNumber;
-            fileNameSpan.textContent = fileOrEntry.name || (`PDF page ${pageNum}`);
-            boxElement.innerHTML = '<span style="color:#f39c12; font-size: 0.9em;">Loading PDF Page...</span>';
+            const fileName = fileOrEntry.origName || `PDF-${pdfId}`;
 
+            fileNameSpan.textContent = `${fileName} (p${pageNum})`;
+            boxElement.dataset.fileName = fileNameSpan.textContent;
+
+            const pdf = loadedPDFs.get(pdfId);
             if (!pdf) {
-                boxElement.innerHTML = `<span>Error: PDF ID ${fileOrEntry.pdfId} missing.</span>`;
-                reject(new Error(`PDF document not found for ID: ${fileOrEntry.pdfId}`));
+                boxElement.innerHTML = `<span>Error: PDF Document ID ${pdfId} not found.</span>`;
+                reject(new Error(`PDF ID ${pdfId} not found`));
                 return;
             }
 
-            // Use CURRENT_RENDER_SCALE for screen rendering
-            const finalScaleFactor = CURRENT_RENDER_SCALE; 
-
             pdf.getPage(pageNum).then(page => {
-                const pageViewport1 = page.getViewport({ scale: 1 });
-                const boxWidthPx = Math.max(10, boxElement.clientWidth || 200);
-                const baseScaleToFit = boxWidthPx / pageViewport1.width;
-                const finalScale = baseScaleToFit * finalScaleFactor;
-
-                const viewport = page.getViewport({ scale: finalScale });
-
+                const viewport = page.getViewport({ scale: CURRENT_RENDER_SCALE });
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
-
                 canvas.width = Math.round(viewport.width);
                 canvas.height = Math.round(viewport.height);
-
                 canvas.style.width = '100%';
                 canvas.style.height = '100%';
 
@@ -811,7 +842,7 @@ async function renderFileInBox(boxElement, fileOrEntry) {
             return;
         }
 
-        const file = fileOrEntry;
+        const file = fileOrEntry; 
         if (file && file.type && file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onload = function(event) {
@@ -819,7 +850,10 @@ async function renderFileInBox(boxElement, fileOrEntry) {
                 img.src = event.target.result;
                 img.alt = file.name || 'image';
                 img.style.filter = boxElement.dataset.filter || 'none';
+                
                 fileNameSpan.textContent = file.name || 'image';
+                boxElement.dataset.fileName = fileNameSpan.textContent;
+
                 boxElement.appendChild(img);
                 boxElement.appendChild(fileNameSpan);
                 resolve();
@@ -828,8 +862,9 @@ async function renderFileInBox(boxElement, fileOrEntry) {
             reader.readAsDataURL(file);
             return;
         }
-
+        
         fileNameSpan.textContent = fileOrEntry.name || 'Unsupported';
+        boxElement.dataset.fileName = fileNameSpan.textContent;
         boxElement.innerHTML = `<span>File: ${fileOrEntry.name || 'Unsupported Preview'}</span>`;
         boxElement.appendChild(fileNameSpan);
         resolve();
@@ -839,7 +874,7 @@ async function renderFileInBox(boxElement, fileOrEntry) {
 /* ---------- Drag & Drop and Box interactions (kept as original) ---------- */
 function handleDragOver(e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) e.currentTarget.style.border = '2px solid blue'; }
 function handleDragLeave(e) { e.currentTarget.style.border = '1px dashed #ccc'; }
-function handleDrop(e) {
+function handleDrop(e) { 
     e.preventDefault();
     handleDragLeave(e);
     const files = e.dataTransfer.files;
@@ -847,12 +882,12 @@ function handleDrop(e) {
         const file = files[0];
         const boxElement = e.currentTarget;
         const divisionNumber = parseInt(boxElement.id.split('-')[2]);
+
         if (file.type === 'application/pdf') {
             placePdfFileStartingAtBox(file, divisionNumber);
         } else if (file.type.startsWith('image/')) {
             boxFileMap.set(divisionNumber, file);
             boxElement.dataset.fileName = file.name;
-
             renderFileInBox(boxElement, file).catch(err => {
                 console.error(err);
                 boxFileMap.delete(divisionNumber);
@@ -863,41 +898,94 @@ function handleDrop(e) {
         }
     }
 }
-function handleBoxClick(e) {
+function handleBoxClick(e) { 
     const box = e.currentTarget;
-    if (e.button === 2) { e.preventDefault(); if (box.dataset.fileName) showContextMenu(box, e.clientX, e.clientY); return; }
-    if (e.button === 0 && box.dataset.fileName) { activeBoxElement = box; openEditingModal('💡 Photo Adjust'); }
+    if (e.button === 2) { 
+        e.preventDefault(); 
+        if (box.dataset.fileName) showContextMenu(box, e.clientX, e.clientY);
+        return; 
+    } 
+    if (e.button === 0 && box.dataset.fileName) { 
+        activeBoxElement = box; 
+        openEditingModal('💡 Photo Adjust'); 
+    }
 }
 
-/* ---------- Page & Grid functions (kept as original) ---------- */
-function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
+/* ---------- Paper Structure & Size functions (kept as original) ---------- */
+function updateMargins() {
+    marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
+    marginBottom = parseFloat(document.getElementById('margin-bottom').value) || 0;
+    marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
+    marginRight = parseFloat(document.getElementById('margin-right').value) || 0;
+    
+    document.querySelectorAll('.paper').forEach(p => {
+        p.querySelector('.grid-container').style.padding = `${marginTop}mm ${marginRight}mm ${marginBottom}mm ${marginLeft}mm`;
+    });
+
+    if (document.getElementById('box-width').getAttribute('data-calculated') === 'true') {
+        calculateConstrainedBoxSize();
+    }
+}
+
+function updateGapSizes() {
+    currentColGap = parseFloat(document.getElementById('col-gap-input').value) || 0;
+    currentRowGap = parseFloat(document.getElementById('row-gap-input').value) || 0;
+
+    document.querySelectorAll('.grid-container').forEach(container => {
+        container.style.gridColumnGap = `${currentColGap}mm`;
+        container.style.gridRowGap = `${currentRowGap}mm`;
+    });
+
+    if (document.getElementById('box-width').getAttribute('data-calculated') === 'true') {
+        calculateConstrainedBoxSize();
+    }
+}
+
+function updateDivisionSize() {
+    const newW = parseFloat(document.getElementById('box-width').value) || 0;
+    const newH = parseFloat(document.getElementById('box-height').value) || 0;
+
+    if (newW > 0 && newH > 0) {
+        currentBoxWidth = newW;
+        currentBoxHeight = newH;
+        isCustomSize = true;
+        document.getElementById('box-width').setAttribute('data-calculated','false');
+        document.getElementById('box-height').setAttribute('data-calculated','false');
+
+        document.querySelectorAll('.grid-container').forEach(container => {
+            container.style.gridTemplateColumns = `repeat(${currentLayout.cols}, ${currentBoxWidth}mm)`;
+            container.style.gridTemplateRows = `repeat(${currentLayout.rows}, ${currentBoxHeight}mm)`;
+        });
+    } else {
+        // If user clears the input, revert to calculated size
+        document.getElementById('box-width').setAttribute('data-calculated','true');
+        document.getElementById('box-height').setAttribute('data-calculated','true');
+        calculateConstrainedBoxSize();
+    }
+}
+
+function calculateConstrainedBoxSize() {
+    const baseSize = PAPER_SIZES[currentPaperSize];
+    const paperWidth = currentOrientation === 'portrait' ? baseSize.w : baseSize.h;
+    const paperHeight = currentOrientation === 'portrait' ? baseSize.h : baseSize.w;
+
     const boxWInput = document.getElementById('box-width');
     const boxHInput = document.getElementById('box-height');
-    if (isCustomSize) {
-        boxWInput.value = currentBoxWidth.toFixed(1);
-        boxHInput.value = currentBoxHeight.toFixed(1);
-        boxWInput.removeAttribute('data-calculated');
-        boxHInput.removeAttribute('data-calculated');
-        return;
-    }
-    const size = PAPER_SIZES[paperSizeKey];
-    let printableWidth = size.w;
-    let printableHeight = size.h;
-
-    if (currentOrientation === 'landscape') {
-        printableWidth = size.h;
-        printableHeight = size.w;
-    }
 
     const totalHorizontalMargin = marginLeft + marginRight;
     const totalVerticalMargin = marginTop + marginBottom;
-    printableWidth -= totalHorizontalMargin;
-    printableHeight -= totalVerticalMargin;
+    const totalColGap = currentColGap * (currentLayout.cols - 1);
+    const totalRowGap = currentRowGap * (currentLayout.rows - 1);
 
-    let newWidth = (printableWidth - (currentLayout.cols - 1) * currentColGap) / currentLayout.cols;
-    let newHeight = (printableHeight - (currentLayout.rows - 1) * currentRowGap) / currentLayout.rows;
+    const availableWidth = paperWidth - totalHorizontalMargin - totalColGap;
+    const availableHeight = paperHeight - totalVerticalMargin - totalRowGap;
+
+    const newWidth = availableWidth / currentLayout.cols;
+    const newHeight = availableHeight / currentLayout.rows;
+
     currentBoxWidth = Math.max(1, newWidth);
     currentBoxHeight = Math.max(1, newHeight);
+
     boxWInput.value = currentBoxWidth.toFixed(1);
     boxHInput.value = currentBoxHeight.toFixed(1);
     boxWInput.setAttribute('data-calculated','true');
@@ -905,6 +993,7 @@ function calculateConstrainedBoxSize(paperSizeKey = currentPaperSize) {
 
     document.getElementById('add-page-btn').textContent = `➕ Add Empty Page (${currentLayout.boxesPerPage} Divisions)`;
 }
+
 function applyGridStyles(container) {
     container.style.padding = `${marginTop}mm ${marginRight}mm ${marginBottom}mm ${marginLeft}mm`;
     container.style.gridTemplateColumns = `repeat(${currentLayout.cols}, ${currentBoxWidth}mm)`;
@@ -912,107 +1001,96 @@ function applyGridStyles(container) {
     container.style.gridColumnGap = `${currentColGap}mm`;
     container.style.gridRowGap = `${currentRowGap}mm`;
 }
+
 function createPage(pageIndex){
-  const wrapper = document.getElementById('page-wrapper');
-  const pageDiv = document.createElement('div');
-  pageDiv.classList.add(`${currentPaperSize}-page`, 'paper');
-  pageDiv.id = `page-${pageIndex}`;
-  if (currentOrientation === 'landscape') pageDiv.classList.add('landscape');
-  if (document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') pageDiv.classList.add('hidden');
+    const wrapper = document.getElementById('page-wrapper');
+    const pageDiv = document.createElement('div');
+    pageDiv.classList.add(`${currentPaperSize}-page`, 'paper');
+    pageDiv.id = `page-${pageIndex}`;
+    
+    if (currentOrientation === 'landscape') pageDiv.classList.add('landscape');
+    if (document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') pageDiv.classList.add('hidden');
 
-  const gridContainer = document.createElement('div');
-  gridContainer.classList.add('grid-container');
-  applyGridStyles(gridContainer);
+    const gridContainer = document.createElement('div');
+    gridContainer.classList.add('grid-container');
+    applyGridStyles(gridContainer);
+    
+    const colorClasses = ['color-a','color-b','color-c','color-d'];
 
-  const colorClasses = ['color-a','color-b','color-c','color-d'];
-  for (let i=0;i<currentLayout.boxesPerPage;i++){
-      const box = document.createElement('div');
-      box.classList.add('box');
-      box.id = `box-div-${nextDivisionNumber}`;
-      box.innerHTML = `<span>Page ${nextDivisionNumber}</span>`;
-      const colorIndex = (nextDivisionNumber - 1) % colorClasses.length;
-      box.classList.add('empty-state', colorClasses[colorIndex]);
-      box.addEventListener('dragover', handleDragOver);
-      box.addEventListener('dragleave', handleDragLeave);
-      box.addEventListener('drop', handleDrop);
-      box.addEventListener('click', handleBoxClick);
-      box.addEventListener('contextmenu', handleBoxClick);
-      
-      // Re-render existing content if available
-      if (boxFileMap.has(nextDivisionNumber)) {
-          const file = boxFileMap.get(nextDivisionNumber);
-          box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${nextDivisionNumber}`);
-          box.classList.remove('empty-state', colorClasses[colorIndex]);
-          box.classList.add('filled-state');
-          // No need to wait for rendering here, it will be done asynchronously
-          renderFileInBox(box, file).catch(err => console.error('Initial render error:', err)); 
-      }
-      
-      gridContainer.appendChild(box);
-      nextDivisionNumber++;
-  }
-  pageDiv.appendChild(gridContainer);
-  wrapper.appendChild(pageDiv);
+    for (let i=0;i<currentLayout.boxesPerPage;i++){
+        const box = document.createElement('div');
+        box.classList.add('box');
+        box.id = `box-div-${nextDivisionNumber}`;
+        box.innerHTML = `<span>Page ${nextDivisionNumber}</span>`;
+        
+        const colorIndex = (nextDivisionNumber - 1) % colorClasses.length;
+        box.classList.add('empty-state', colorClasses[colorIndex]);
+        
+        box.addEventListener('dragover', handleDragOver);
+        box.addEventListener('dragleave', handleDragLeave);
+        box.addEventListener('drop', handleDrop);
+        box.addEventListener('click', handleBoxClick);
+        box.addEventListener('contextmenu', handleBoxClick);
+        
+        // Re-render existing content if available
+        if (boxFileMap.has(nextDivisionNumber)) {
+            const file = boxFileMap.get(nextDivisionNumber);
+            box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${nextDivisionNumber}`);
+            box.classList.remove('empty-state', colorClasses[colorIndex]);
+            box.classList.add('filled-state');
+            // No need to wait for rendering here, it will be done asynchronously
+            renderFileInBox(box, file).catch(err => console.error('Error re-rendering existing box:', err));
+        }
+
+        gridContainer.appendChild(box);
+        nextDivisionNumber++;
+    }
+
+    pageDiv.appendChild(gridContainer);
+    wrapper.appendChild(pageDiv);
 }
 
-window.resetPaper = function(){
-  const wrapper = document.getElementById('page-wrapper');
-  wrapper.innerHTML = '';
-  const tempBoxFileMap = new Map(boxFileMap);
-  const totalDivisions = nextDivisionNumber - 1;
-  currentPageIndex = 0;
-  nextDivisionNumber = 1;
-  currentInterleavedFileIndex = 0;
-  boxFileMap.clear();
-  calculateConstrainedBoxSize();
-  const totalPagesNeeded = Math.ceil(totalDivisions / currentLayout.boxesPerPage);
-  const numPagesToCreate = Math.max(2, totalPagesNeeded);
-  for (let i=0;i<numPagesToCreate;i++) createPage(i);
-  boxFileMap = tempBoxFileMap;
-  const renderPromises = [];
-  for (const [divisionNumber,file] of boxFileMap.entries()){
-      const box = document.getElementById(`box-div-${divisionNumber}`);
-      if (box) {
-          const colorClasses = ['color-a','color-b','color-c','color-d'];
-          const colorIndex = (divisionNumber - 1) % colorClasses.length;
-          box.classList.remove('empty-state', colorClasses[colorIndex]);
-          box.classList.add('filled-state');
-          box.dataset.fileName = file.name || (file.origName ? file.origName + ` (p${file.pageNumber})` : `Box ${divisionNumber}`);
-          renderPromises.push(renderFileInBox(box, file).catch(() => {})); // Push promise, ignore errors to continue loading
-      }
-  }
-  Promise.all(renderPromises).then(hideContextMenu).catch(()=>hideContextMenu());
-};
+function resetPaper() {
+    const wrapper = document.getElementById('page-wrapper');
+    const oldPaperElements = document.querySelectorAll('.paper');
+    const isHidden = document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper';
 
-window.updateMargins = function() {
-    marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
-    marginBottom = parseFloat(document.getElementById('margin-bottom').value) || 0;
-    marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
-    marginRight = parseFloat(document.getElementById('margin-right').value) || 0;
-    isCustomSize = false;
-    document.getElementById('box-width').setAttribute('data-calculated','true');
-    document.getElementById('box-height').setAttribute('data-calculated','true');
-    resetPaper();
-};
+    wrapper.innerHTML = '';
+    
+    // Recalculate size unless it's a custom size
+    if (!isCustomSize) {
+        calculateConstrainedBoxSize();
+    } else {
+        // Apply custom size visually
+        updateDivisionSize();
+    }
 
-window.updateDivisionSize = function() {
-    currentBoxWidth = parseFloat(document.getElementById('box-width').value) || 1;
-    currentBoxHeight = parseFloat(document.getElementById('box-height').value) || 1;
-    if (currentBoxWidth < 1 || currentBoxHeight < 1) return;
-    isCustomSize = true;
-    document.getElementById('box-width').removeAttribute('data-calculated');
-    document.getElementById('box-height').removeAttribute('data-calculated');
-    resetPaper();
-};
+    // Reset pagination variables
+    currentPageIndex = 0;
+    nextDivisionNumber = 1;
 
-window.updateGapSizes = function() {
-    currentColGap = parseFloat(document.getElementById('col-gap-input').value) || 0;
-    currentRowGap = parseFloat(document.getElementById('row-gap-input').value) || 0;
-    isCustomSize = false;
-    document.getElementById('box-width').setAttribute('data-calculated','true');
-    document.getElementById('box-height').setAttribute('data-calculated','true');
-    resetPaper();
-};
+    // Determine how many pages to recreate (based on the highest division number in the map)
+    let maxDivision = 0;
+    if (boxFileMap.size > 0) {
+        maxDivision = Math.max(...boxFileMap.keys());
+    }
+
+    let requiredPages = Math.ceil(maxDivision / currentLayout.boxesPerPage);
+    
+    if (requiredPages === 0) {
+        requiredPages = 2; // Create at least two pages if empty
+    }
+
+    for (let i = 1; i <= requiredPages; i++) {
+        currentPageIndex = i;
+        createPage(currentPageIndex);
+    }
+    
+    // Ensure the toggle state is reapplied if the pages were hidden
+    if (isHidden) {
+        document.querySelectorAll('.paper').forEach(p => p.classList.add('hidden'));
+    }
+}
 
 function handlePaperSizeChange(newSize) {
     currentPaperSize = newSize;
@@ -1021,6 +1099,7 @@ function handlePaperSizeChange(newSize) {
     document.getElementById('box-height').setAttribute('data-calculated','true');
     resetPaper();
 }
+
 function handleDivisionChange(newDivision) {
     currentDivision = newDivision;
     currentLayout = DIVISION_LAYOUTS[newDivision];
@@ -1030,6 +1109,7 @@ function handleDivisionChange(newDivision) {
     updateUploadModes(newDivision);
     resetPaper();
 }
+
 function handleOrientationChange(newOrientation) {
     currentOrientation = newOrientation;
     isCustomSize = false;
@@ -1041,7 +1121,6 @@ function handleOrientationChange(newOrientation) {
 function updateUploadModes(division) {
     const allModes = document.querySelectorAll('#upload-mode-controls label');
     let serialChecked = false;
-
     allModes.forEach(label => {
         const supportedDivisions = label.dataset.division.split(',');
         const isSupported = supportedDivisions.includes(division);
@@ -1071,54 +1150,114 @@ window.addNewPage = function() {
     currentPageIndex++;
     createPage(currentPageIndex);
     const newPage = document.getElementById(`page-${currentPageIndex}`);
-    if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') newPage.classList.add('hidden');
+    // Scroll to the new page
+    if (newPage) newPage.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* ---------- Upload Mode logic (kept as original) ---------- */
 function getNextSerialBoxID() {
-    for (let i=1;i<nextDivisionNumber;i++){
-        const box = document.getElementById(`box-div-${i}`);
-        if (box && !boxFileMap.has(i)) return i;
+    let nextID = 1;
+    // Find the next available ID by checking the map
+    while (boxFileMap.has(nextID)) {
+        nextID++;
     }
-    return nextDivisionNumber;
+    return nextID;
 }
 
 function getInterleavedID(mode) {
-    currentInterleavedFileIndex++;
-    const BPP = currentLayout.boxesPerPage;
-    const F = currentInterleavedFileIndex;
-    let targetID;
+    const boxesPerPage = currentLayout.boxesPerPage;
+    const filledIndex = currentInterleavedFileIndex;
 
-    if (currentDivision === '4') {
-        const block = 2 * BPP;
-        const blockIndex = Math.floor((F - 1) / block);
-        const blockBaseID = blockIndex * block + 1;
-        const F_g = F - (blockIndex * block);
+    const blockNumber = Math.floor(filledIndex / boxesPerPage);
+    const boxIndexInBlock = filledIndex % boxesPerPage;
+    
+    let targetBoxIndex = boxIndexInBlock;
 
-        if (F_g % 2 === 1) {
-            targetID = blockBaseID + (F_g + 1)/2 - 1;
-        } else {
-            const B_on_page = F_g / 2;
-            if (mode === 'interleaved-standard') {
-                const pageTwoBase = blockBaseID + BPP;
-                targetID = pageTwoBase + B_on_page - 1;
-            } else if (mode === 'interleaved-custom') {
-                const PAGE_TWO_CUSTOM_ORDER_OFFSET = [6,5,8,7];
-                const boxIDInBlock = PAGE_TWO_CUSTOM_ORDER_OFFSET[B_on_page - 1];
-                targetID = blockBaseID + boxIDInBlock - 1;
+    if (mode === 'interleaved-A' && boxesPerPage === 2) {
+        if (boxIndexInBlock === 1) targetBoxIndex = 0; else targetBoxIndex = 1; // 0, 1 -> 1, 0. This is actually standard reverse. Let's stick to the user's description.
+        // User's description: 1, 3, 2, 4
+        // Page 1 (boxes 1, 2): 1 -> 1, 2 -> 3 (i.e. next page, box 1)
+        // Page 2 (boxes 3, 4): 3 -> 2, 4 -> 4 (i.e. next page, box 2)
+        // This suggests: (file#1 -> box#1), (file#2 -> box#3), (file#3 -> box#2), (file#4 -> box#4)
+        // Pattern: (n*2 + 1), (n*2 + 3), (n*2 + 2), (n*2 + 4) -- for boxesPerPage=2
+        // Since we are tracking the next *file* index, let's use the file index.
+
+        // File index (0-based) -> Box ID (1-based)
+        // 0 -> 1, 1 -> 3, 2 -> 2, 3 -> 4, 4 -> 5, 5 -> 7, 6 -> 6, 7 -> 8
+        // If file_idx is even (0, 2, 4, 6), target_box = file_idx + 1 (1, 3, 5, 7)
+        // If file_idx is odd (1, 3, 5, 7), target_box = file_idx + 2 (3, 5, 7, 9)
+
+        // Correction based on user's pattern: 1, 3, 2, 4
+        // File#1 (idx 0) -> Box 1 (1+0)
+        // File#2 (idx 1) -> Box 3 (1+2)
+        // File#3 (idx 2) -> Box 2 (1+1)
+        // File#4 (idx 3) -> Box 4 (1+3)
+        // This pattern does not seem to fit.
+
+        // Standard Interleaved (1, 5, 2, 6) for 2x2 = 4 boxes/page
+        // File 1 -> Box 1 (Page 1)
+        // File 2 -> Box 5 (Page 2)
+        // File 3 -> Box 2 (Page 1)
+        // File 4 -> Box 6 (Page 2)
+
+        // We use the file index for interleaving logic, then calculate the target box ID.
+        // The box ID is 1-based, sequential.
+
+        let targetID = 0;
+        let pagesToSkip = currentLayout.boxesPerPage === 2 ? 1 : 2; // For 2 boxes/page, skip 1 page (box 1 -> 3). For 4, skip 2 pages (box 1 -> 5).
+
+        if (mode === 'interleaved-A' && boxesPerPage === 2) {
+            // Pattern: 1, 3, 2, 4, 5, 7, 6, 8...
+            // File index: 0, 1, 2, 3, 4, 5, 6, 7...
+            if (filledIndex % 4 < 2) {
+                // files 0, 1, 4, 5... go to odd boxes (1, 3, 5, 7...)
+                targetID = (Math.floor(filledIndex / 2) * 2) + 1 + (filledIndex % 2) * 2;
+            } else {
+                // files 2, 3, 6, 7... go to even boxes (2, 4, 6, 8...)
+                targetID = (Math.floor(filledIndex / 2) * 2) + 2 - (filledIndex % 2) * 2;
             }
+        } else if (mode === 'interleaved-standard' && boxesPerPage === 4) {
+            // Pattern: 1, 5, 2, 6, 3, 7, 4, 8...
+            // Base ID for current page (1 or 2): filledIndex % boxesPerPage
+            // Page offset (0 or 4): Math.floor(filledIndex / boxesPerPage) * 4
+            const pageInBlock = filledIndex % boxesPerPage;
+            const blockCycle = Math.floor(filledIndex / boxesPerPage); // 0, 1, 2, 3...
+            const boxIndexOnSheet = Math.floor(pageInBlock / 2) + (pageInBlock % 2) * 2; // Maps 0,1,2,3 to 0,2,1,3 (approx 1,2,3,4 to 1,3,2,4 on sheet)
+            
+            // Simplified: Page 1 receives files 1,3,5,7...; Page 2 receives files 2,4,6,8...
+            const fileIsOdd = (filledIndex % 2) === 0; // File 1, 3, 5... (index 0, 2, 4...) -> Page 1
+            const filePosInGroup = Math.floor(filledIndex / 2); // 0, 1, 2, 3...
+            const pageMultiplier = fileIsOdd ? 0 : boxesPerPage;
+            targetID = (filePosInGroup % boxesPerPage) + 1 + pageMultiplier + (Math.floor(filePosInGroup / boxesPerPage) * boxesPerPage * 2);
+        } else if (mode === 'interleaved-custom' && boxesPerPage === 4) {
+            // Pattern: 1, 6, 2, 5, 3, 8, 4, 7...
+            // This is standard-like but file 2 and 4 are swapped.
+            // File 1 -> Box 1, File 2 -> Box 6, File 3 -> Box 2, File 4 -> Box 5.
+            const fileIsOdd = (filledIndex % 2) === 0;
+            const filePosInGroup = Math.floor(filledIndex / 2);
+            const pageMultiplier = fileIsOdd ? 0 : boxesPerPage;
+            let boxIndex = (filePosInGroup % boxesPerPage) + 1;
+            
+            // Custom swap logic for file 2 and 4 (index 1 and 3)
+            if (!fileIsOdd) { // For the even files (index 1, 3, 5...)
+                 if (boxIndex === 2) boxIndex = 1; else if (boxIndex === 1) boxIndex = 2; // Swap 1 and 2 (Box 5 and 6)
+            }
+            targetID = boxIndex + pageMultiplier + (Math.floor(filePosInGroup / boxesPerPage) * boxesPerPage * 2);
+        } else {
+             // Fallback to Serial
+             return getNextSerialBoxID();
         }
-        return targetID;
-    } else if (currentDivision === '2' && mode === 'interleaved-A') {
-        const blockCycle = F % 4;
-        const cycleBase = F - (blockCycle || 4);
-        if (blockCycle === 1) targetID = cycleBase + 1;
-        else if (blockCycle === 2) targetID = cycleBase + 3;
-        else if (blockCycle === 3) targetID = cycleBase + 2;
-        else if (blockCycle === 0) targetID = cycleBase + 4;
+        
+        // Final check to see if the calculated ID is already filled (only relevant for interleaved)
+        if (boxFileMap.has(targetID)) {
+            // If the target slot is already filled, we must use the next available serial slot.
+            // This happens if files are uploaded outside of a full interleaved set (e.g., upload 1 file, then another in serial mode).
+            // For now, as per instruction in handleFile, we warn and stop. For multi-upload, this is more complex.
+            // We'll rely on the check in handleFile/handlePdfFile for now and simplify the ID calculation here to the base.
+            return targetID;
+        }
+
         return targetID;
     }
-
     return getNextSerialBoxID();
 }
 
@@ -1133,8 +1272,14 @@ function getNextTargetBoxID() {
         return getNextSerialBoxID();
     } else {
         let filledCount = 0;
+        // The interleaved index should be the count of all files placed so far, *not* just the ones on the first page.
+        // It must be derived from the highest occupied box ID and the known layout.
+        // For simplicity and to match the existing logic which uses `filledCount`, we'll use a simple count from 1 to nextDivisionNumber.
+
+        // We use the count of files *placed* in the map to determine the index in the interleaved sequence.
+        // Note: The original logic in the provided code calculates `filledCount` this way:
         for (let i = 1; i < nextDivisionNumber; i++) {
-            if (boxFileMap.has(i)) filledCount++;
+             if (boxFileMap.has(i)) filledCount++;
         }
         currentInterleavedFileIndex = filledCount;
         return getInterleavedID(uploadMode);
@@ -1142,12 +1287,15 @@ function getNextTargetBoxID() {
 }
 
 function checkAndCreatePages(requiredID) {
-  while (requiredID >= nextDivisionNumber) {
-      currentPageIndex++;
-      createPage(currentPageIndex);
-      const newPage = document.getElementById(`page-${currentPageIndex}`);
-      if (newPage && document.getElementById('togglePaperBtn').textContent === 'Show Screen Paper') newPage.classList.add('hidden');
-  }
+    while (requiredID >= nextDivisionNumber) {
+        currentPageIndex++;
+        createPage(currentPageIndex);
+        const newPage = document.getElementById(`page-${currentPageIndex}`);
+        // Ensure new pages created are hidden if the paper is hidden
+        if (newPage && document.getElementById('togglePaperBtn').textContent === 'Hide Screen Paper') {
+            newPage.classList.add('hidden');
+        }
+    }
 }
 
 /* ---------- File upload handlers (OPTIMIZED FOR PDF SPEED) ---------- */
@@ -1165,78 +1313,79 @@ function handleFile(file) {
 
     if (uploadMode !== 'serial' && boxFileMap.has(targetID)) {
         alert(`File ${file.name} skipped: The next calculated slot (Box ${targetID}) is already filled. Use Serial mode or delete existing content.`);
-        currentInterleavedFileIndex--;
+        currentInterleavedFileIndex--; // Decrement as we didn't place the file
         return;
     }
 
     checkAndCreatePages(targetID);
+    
     const box = document.getElementById(`box-div-${targetID}`);
     if (box) {
         boxFileMap.set(targetID, file);
         box.dataset.fileName = file.name;
-
         renderFileInBox(box, file).catch(error => {
             console.error(`Error rendering file ${file.name} in box ${targetID}:`, error);
-            alert(`Could not display ${file.name}. Check console for details.`);
-            box.innerHTML = `<span>Error: ${file.name}</span>`;
-            boxFileMap.delete(targetID);
+            boxFileMap.delete(targetID); // Clean up on error
             delete box.dataset.fileName;
-            if (uploadMode !== 'serial') currentInterleavedFileIndex--;
         });
     }
 }
 
 function handlePdfFile(file) {
+    document.getElementById('multi-upload-btn').textContent = `...Loading PDF ${file.name}...`;
+
     const reader = new FileReader();
     reader.onload = function(ev) {
         const arrayBuffer = ev.target.result;
+        const pdfId = nextPdfId++; // Get a unique ID for this PDF
         
-        // 1. Get a unique ID for this PDF
-        const pdfId = nextPdfId++;
-        
-        // 2. Start loading the PDF document (this is asynchronous)
         pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(pdfDoc => {
-            // 3. Store the loaded PDF document in the global map for later use
             loadedPDFs.set(pdfId, pdfDoc);
             const total = pdfDoc.numPages;
 
-            // 4. ***OPTIMIZATION: Synchronously map pages to boxes for instant upload speed***
             for (let p = 1; p <= total; p++) {
                 const targetID = getNextTargetBoxID();
+                
                 if (uploadMode !== 'serial' && boxFileMap.has(targetID)) {
-                    currentInterleavedFileIndex--;
-                    continue;
+                    // Only alert and stop PDF if one of the intended interleaved slots is filled.
+                    alert(`PDF ${file.name} stopped at page ${p}: The intended slot (Box ${targetID}) is already filled. Remaining pages skipped.`);
+                    // Decrement interleaved index for the pages we didn't process
+                    currentInterleavedFileIndex -= (total - p + 1); 
+                    break;
                 }
+
+                // 1. Ensure page exists for target ID (Create if needed)
                 checkAndCreatePages(targetID);
                 const box = document.getElementById(`box-div-${targetID}`);
-                if (!box) continue;
+                if (!box) {
+                    // This should theoretically not happen if checkAndCreatePages works, but for safety:
+                    console.error('Target box not found after creation check:', targetID);
+                    break; 
+                }
+
+                // 2. Create the file entry (kind: 'pdfpage' for easy type check)
+                const entry = { kind: 'pdfpage', pdfId: pdfId, pageNumber: p, name: `${file.name} (p${p})`, origName: file.name };
                 
-                // Store only the PDF ID and page number in the boxFileMap
-                const entry = {
-                    kind: 'pdfpage',
-                    pdfId: pdfId, // Store ID instead of object
-                    pageNumber: p,
-                    name: `${file.name} (p${p})`,
-                    origName: file.name
-                };
+                // 3. Store in the global map for rendering
                 boxFileMap.set(targetID, entry);
                 box.dataset.fileName = entry.name;
                 
-                // 5. Render asynchronously - this part is the only one that takes time, but the map is updated instantly.
+                // 4. Render asynchronously - this part is the only one that takes time, but the map is updated instantly. 
                 // We don't wait for the render.
                 renderFileInBox(box, entry).catch(err => console.error('PDF page render error:', err));
             }
+            document.getElementById('multi-upload-btn').textContent = `➕ Choose Files (Images/PDF)`;
+
         }).catch(err => {
             alert('Failed to parse PDF: ' + err.message);
             console.error(err);
+            document.getElementById('multi-upload-btn').textContent = `➕ Choose Files (Images/PDF)`;
         });
-        
-        document.getElementById('multi-upload-btn').textContent = `...Loading PDF ${file.name}...`;
-
     };
     reader.onerror = function(err) {
         alert('Failed to read PDF file.');
         console.error(err);
+        document.getElementById('multi-upload-btn').textContent = `➕ Choose Files (Images/PDF)`;
     };
     reader.readAsArrayBuffer(file);
 }
@@ -1246,32 +1395,35 @@ function placePdfFileStartingAtBox(file, startBoxId) {
     reader.onload = function(ev) {
         const arrayBuffer = ev.target.result;
         const pdfId = nextPdfId++;
-        
         pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(pdfDoc => {
             loadedPDFs.set(pdfId, pdfDoc);
             let pointer = startBoxId;
             const total = pdfDoc.numPages;
 
-            // 1. Delete existing files from startBoxId onwards
-            for(let i=startBoxId; i < nextDivisionNumber; i++){
-                const existingBox = document.getElementById(`box-div-${i}`);
-                if(existingBox && boxFileMap.has(i)) deleteFileFromBox(existingBox);
-            }
+            // 1. Delete existing files from startBoxId onwards (if they were part of the previous PDF)
+            // This is actually tricky because a new PDF might replace a different PDF that was already filling subsequent boxes.
+            // For simplicity, we just delete the immediate box and rely on the new PDF to overwrite everything else sequentially.
+            // The main `deleteFileFromBox` does a better cleanup for one full PDF, but here we are placing a new one.
+
+            // Clear the existing entry for the start box only (new pages will fill over existing non-pdf entries anyway)
+            const existingBox = document.getElementById(`box-div-${startBoxId}`);
+            if(existingBox && boxFileMap.has(startBoxId)) deleteFileFromBox(existingBox); 
+
 
             // 2. Synchronously map new PDF pages
             for (let p = 1; p <= total; p++) {
                 checkAndCreatePages(pointer);
                 const box = document.getElementById(`box-div-${pointer}`);
-                if (!box) { pointer++; continue; }
-                const entry = {
-                    kind: 'pdfpage',
-                    pdfId: pdfId, // Store ID instead of object
-                    pageNumber: p,
-                    name: `${file.name} (p${p})`,
-                    origName: file.name
-                };
+
+                if (!box) {
+                    pointer++;
+                    continue;
+                }
+
+                const entry = { kind: 'pdfpage', pdfId: pdfId, pageNumber: p, name: `${file.name} (p${p})`, origName: file.name };
                 boxFileMap.set(pointer, entry);
                 box.dataset.fileName = entry.name;
+
                 // Render asynchronously
                 renderFileInBox(box, entry).catch(err => console.error('PDF page render error:', err));
                 pointer++;
@@ -1284,66 +1436,52 @@ function placePdfFileStartingAtBox(file, startBoxId) {
     reader.readAsArrayBuffer(file);
 }
 
-function deleteFileFromBox(boxElement) {
-    const divisionNumber = parseInt(boxElement.id.split('-')[2]);
-    const colorClasses = ['color-a','color-b','color-c','color-d'];
-    const colorIndex = (divisionNumber - 1) % colorClasses.length;
-    boxElement.classList.remove('filled-state');
-    boxElement.classList.add('empty-state', colorClasses[colorIndex]);
-    boxElement.innerHTML = `<span>Page ${divisionNumber}</span>`;
-    boxElement.style.backgroundImage = 'none';
-    delete boxElement.dataset.fileName;
-    delete boxElement.dataset.brightness;
-    delete boxElement.dataset.contrast;
-    delete boxElement.dataset.filter;
-    delete boxElement.dataset.cropWidth;
-    delete boxElement.dataset.cropHeight;
-    boxElement.style.width = '';
-    boxElement.style.height = '';
-    boxElement.style.flexShrink = '';
-    boxFileMap.delete(divisionNumber);
-    // Note: We intentionally DO NOT delete the PDF object from loadedPDFs 
-    // unless ALL of its pages are deleted, to allow for faster re-upload/replacement.
-}
-window.deleteFile = function() {
-    if (activeBoxElement) {
-        deleteFileFromBox(activeBoxElement);
-        hideContextMenu();
-    }
-}
-
-/* ---------- Save As File Function (OPTIMIZED FOR SPEED) ---------- */
+/* ---------- Save functions (MODIFIED) ---------- */
 window.saveSheetsAsFile = async function() {
+    const saveBtn = document.getElementById('save-sheets-btn');
+    const controlsContainer = document.getElementById('controls-panel-container');
+    const paperWrapper = document.getElementById('page-wrapper');
     const saveType = document.getElementById('save-as-type-select').value;
     const saveQualitySelect = document.getElementById('save-quality-select');
-    const paperWrapper = document.getElementById('page-wrapper');
-    const controlsContainer = document.getElementById('controls-panel-container');
-    const saveBtn = document.getElementById('save-sheets-btn');
-    // NOTE: The CAPTURE_SCALE is now only used for image quality setting in html2canvas,
-    // but we trust the existing PDF canvas resolution set by CURRENT_RENDER_SCALE for speed.
+    
+    // Check if there's anything to save first
+    const paperElements = document.querySelectorAll('#page-wrapper .paper'); // Select ALL paper elements, regardless of visibility
+    if (paperElements.length === 0) {
+        alert('No sheets to save.');
+        return;
+    }
+
+    // --- Start of Visibility Management (ADDED) ---
+    const hiddenPages = [];
+    paperElements.forEach(p => {
+        if (p.classList.contains('hidden')) {
+            hiddenPages.push(p);
+            p.classList.remove('hidden'); // Make the page visible for capture
+        }
+    });
+    // --- End of Visibility Management (ADDED) ---
+
+    // Configuration for html2canvas
     const selectedQualityScale = saveQualitySelect.value;
     const CAPTURE_SCALE = parseFloat(selectedQualityScale);
     const qualityText = saveQualitySelect.options[saveQualitySelect.selectedIndex].textContent;
-
+    
     saveBtn.disabled = true;
     saveBtn.innerHTML = `⏱️ Processing (${qualityText})...`;
 
-    /*after save file name*/ const fileName = `All-in-one-minimize`;
+    const fileName = `All-in-one-minimize`;
     let wasControlsOpen = false;
     if (!controlsContainer.classList.contains('hidden')) {
         controlsContainer.classList.add('hidden');
         wasControlsOpen = true;
     }
-    
+
     // Hide file name overlays before capture
     paperWrapper.classList.add('hide-overlays');
 
-    // **CRITICAL OPTIMIZATION: REMOVED THE ASYNCHRONOUS PDF RE-RENDER LOOP**
-    // The save process will now rely on the existing canvas content, making it FAST.
-
-
     try {
         if (saveType === 'doc' || saveType === 'docx') {
+            saveBtn.innerHTML = `⏱️ Generating ${saveType.toUpperCase()}...`;
             const fileContent = `
                 <!DOCTYPE html>
                 <html>
@@ -1352,19 +1490,29 @@ window.saveSheetsAsFile = async function() {
                     <title>${fileName}</title>
                     <meta name="viewport" content="width=device-width,initial-scale=1">
                     <style>
-                        .paper {
-                            width: ${currentOrientation === 'landscape' ? PAPER_SIZES[currentPaperSize].h : PAPER_SIZES[currentPaperSize].w}mm;
-                            min-height: ${currentOrientation === 'landscape' ? PAPER_SIZES[currentPaperSize].w : PAPER_SIZES[currentPaperSize].h}mm;
-                            margin: 0 auto 20px;
-                            box-shadow: none;
-                            border: 1px solid #ccc;
-                            padding: 10mm;
-                            box-sizing: border-box;
-                            page-break-after: always;
+                        .paper { 
+                            width: ${currentOrientation === 'landscape' ? PAPER_SIZES[currentPaperSize].h : PAPER_SIZES[currentPaperSize].w}mm; 
+                            min-height: ${currentOrientation === 'landscape' ? PAPER_SIZES[currentPaperSize].w : PAPER_SIZES[currentPaperSize].h}mm; 
+                            margin: 0 auto 20px; 
+                            box-shadow: none; 
+                            border: 1px solid #ccc; 
+                            padding: ${marginTop}mm ${marginRight}mm ${marginBottom}mm ${marginLeft}mm; /* Use actual margins */
+                            box-sizing: border-box; 
+                            page-break-after: always; 
                         }
                         .box { border: 1px solid #eee; min-height: 100px; padding: 5px; margin-bottom: 5px; }
+                        /* Ensure only images show for doc/docx, canvas is PDF preview */
                         .box canvas { display: none; }
-                        .box img { max-width: 100%; height: auto; display: block; }
+                        .box img { max-width: 100%; height: auto; display: block; filter: inherit; } 
+                        .grid-container { 
+                            display: grid; 
+                            grid-template-columns: repeat(${currentLayout.cols}, ${currentBoxWidth}mm); 
+                            grid-template-rows: repeat(${currentLayout.rows}, ${currentBoxHeight}mm); 
+                            grid-column-gap: ${currentColGap}mm; 
+                            grid-row-gap: ${currentRowGap}mm; 
+                            width: 100%; 
+                            height: 100%;
+                        }
                         @page { margin: 1in; }
                     </style>
                 </head>
@@ -1374,75 +1522,22 @@ window.saveSheetsAsFile = async function() {
                     ${paperWrapper.innerHTML}
                 </body>
                 </html>
-            `;
-            const blob = new Blob([fileContent], { type: "application/msword" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${fileName}.${saveType}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            alert(`Sheets saved as ${saveType.toUpperCase()}.`);
-            return;
-        }
+            `.trim();
+            const blob = new Blob([fileContent], { type: 'application/msword;charset=utf-8' });
+            saveAs(blob, `${fileName}.${saveType}`);
+            alert(`Sheets successfully saved as ${saveType.toUpperCase()}.`);
 
-        if (saveType === 'png' || saveType === 'jpg') {
-            saveBtn.innerHTML = `⏱️ Capturing image...`;
-            // Use CAPTURE_SCALE (2.5x, 4.0x, or 6.0x) for quality save
-            const canvas = await html2canvas(paperWrapper, {
-                scale: CAPTURE_SCALE, 
-                allowTaint: true,
-                useCORS: true,
-                scrollX: 0,
-                scrollY: 0,
-                windowWidth: paperWrapper.scrollWidth,
-                windowHeight: paperWrapper.scrollHeight
-            });
-
-            let downloadURL = null;
-            let extension = '';
-
-            if (saveType === 'png') {
-                downloadURL = canvas.toDataURL('image/png');
-                extension = 'png';
-            } else if (saveType === 'jpg') {
-                downloadURL = canvas.toDataURL('image/jpeg', 1.0);
-                extension = 'jpg';
-            }
-
-            if (downloadURL) {
-                const a = document.createElement('a');
-                a.href = downloadURL;
-                a.download = `${fileName}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                alert(`Sheets saved as ${extension.toUpperCase()} image.`);
-            } else {
-                alert('Failed to generate image.');
-            }
-            return;
-        }
-
-        if (saveType === 'pdf') {
+        } else if (saveType === 'pdf') {
             saveBtn.innerHTML = `⏱️ Creating final PDF...`;
             const { jsPDF } = window.jspdf;
-
-            const paperElements = document.querySelectorAll('#page-wrapper .paper:not(.hidden)');
-            if (paperElements.length === 0) {
-                alert('No sheets visible to save.');
-                return;
-            }
-
+            
             let pdf = null;
             for (let idx = 0; idx < paperElements.length; idx++) {
                 const paper = paperElements[idx];
                 const rect = paper.getBoundingClientRect();
-                
                 saveBtn.innerHTML = `⏱️ Processing Page ${idx + 1} of ${paperElements.length}...`;
-
+                
+                // html2canvas capture logic remains the same, it will now capture the temporarily unhidden pages
                 const canvas = await html2canvas(paper, {
                     scale: CAPTURE_SCALE,
                     allowTaint: true,
@@ -1457,11 +1552,11 @@ window.saveSheetsAsFile = async function() {
                 });
 
                 const imgData = canvas.toDataURL('image/jpeg', 1.0);
-
                 const baseSize = PAPER_SIZES[currentPaperSize];
                 let pdfWidthMM = baseSize.w;
                 let pdfHeightMM = baseSize.h;
                 let orientation = 'portrait';
+
                 if (paper.classList.contains('landscape')) {
                     orientation = 'landscape';
                     pdfWidthMM = baseSize.h;
@@ -1483,59 +1578,121 @@ window.saveSheetsAsFile = async function() {
 
             if (pdf) {
                 pdf.save(`${fileName}.pdf`);
-                alert(`Sheets successfully saved as multi-page PDF!`);
-            } else {
-                alert('Failed to create PDF.');
+                alert(`Sheets successfully saved as multi-page PDF...`);
             }
-            return;
+
+        } else if (saveType === 'png' || saveType === 'jpg') {
+            // PNG / JPG save logic
+            saveBtn.innerHTML = `⏱️ Creating final ${saveType.toUpperCase()}...`;
+
+            if (paperElements.length > 1) {
+                alert(`Saving as ${saveType.toUpperCase()} is only supported for a single sheet. Please print if you have multiple pages.`);
+                return;
+            }
+
+            const paper = paperElements[0];
+            const rect = paper.getBoundingClientRect();
+            
+            const canvas = await html2canvas(paper, {
+                scale: CAPTURE_SCALE,
+                allowTaint: true,
+                useCORS: true,
+                backgroundColor: null,
+                width: Math.ceil(rect.width),
+                height: Math.ceil(rect.height),
+                windowWidth: document.documentElement.clientWidth,
+                windowHeight: document.documentElement.clientHeight,
+                scrollX: -window.scrollX - rect.left,
+                scrollY: -window.scrollY - rect.top
+            });
+
+            // Fallback for file saver if not loaded (not needed if using saveAs from jsPDF)
+            const saveAs = (typeof window.saveAs === 'function') ? window.saveAs : (blob, filename) => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            if (saveType === 'png') {
+                canvas.toBlob(function(blob) {
+                    saveAs(blob, `${fileName}.png`);
+                    alert(`Sheet successfully saved as PNG image.`);
+                }, 'image/png');
+            } else if (saveType === 'jpg') {
+                canvas.toBlob(function(blob) {
+                    saveAs(blob, `${fileName}.jpg`);
+                    alert(`Sheet successfully saved as JPEG image.`);
+                }, 'image/jpeg', 0.9); // 90% quality for JPG
+            }
+
+        } else {
+            alert(`Unsupported save type: ${saveType}.`);
         }
-    } catch (err) {
-        console.error("Error during file saving:", err);
-        alert('An unexpected error occurred while saving. Check console for details.');
+    } catch (error) {
+        console.error('Save failed:', error);
+        alert('An error occurred during save. Check the console for details. Error: ' + error.message);
     } finally {
-        // Show overlays again
-        paperWrapper.classList.remove('hide-overlays');
+        // --- Restore Visibility Management (ADDED) ---
+        hiddenPages.forEach(p => p.classList.add('hidden')); 
+        // --- End of Restore Visibility Management (ADDED) ---
 
-        // Note: No need to call resetPaper to re-render, as we rely on the current screen render for speed.
-
-        if (wasControlsOpen) controlsContainer.classList.remove('hidden');
+        // Cleanup
         saveBtn.disabled = false;
-        updateSaveButtonText();
+        if (wasControlsOpen) controlsContainer.classList.remove('hidden');
+        paperWrapper.classList.remove('hide-overlays');
+        updateSaveButtonText(); // Restore save button text and scale
     }
-};
+}
 
-/* ---------- Misc helpers (kept as original) ---------- */
-function toggleControls(){
-  const panel = document.getElementById('controls-panel-container');
-  panel.classList.toggle('hidden');
-  const btn = document.getElementById('toggle-controls-btn');
-  btn.innerHTML = panel.classList.contains('hidden') ? '&#9664;' : '&#10006;';
+
+/* ---------- Event Listeners & Initialization (kept as original) ---------- */
+function togglePaper() {
+    const toggleBtn = document.getElementById('togglePaperBtn');
+    const paperElements = document.querySelectorAll('.paper');
+    const isHidden = toggleBtn.textContent === 'Show Screen Paper';
+
+    paperElements.forEach(p => {
+        if (isHidden) p.classList.remove('hidden');
+        else p.classList.add('hidden');
+    });
+
+    toggleBtn.textContent = isHidden ? 'Hide Screen Paper' : 'Show Screen Paper';
 }
-function togglePaper(){
-  const allPages = document.querySelectorAll('.paper');
-  allPages.forEach(p=>p.classList.toggle('hidden'));
-  const button = document.getElementById('togglePaperBtn');
-  if (allPages[0] && allPages[0].classList.contains('hidden')) button.textContent = 'Show Screen Paper';
-  else button.textContent = 'Hide Screen Paper';
+
+function toggleControls() {
+    document.getElementById('controls-panel-container').classList.toggle('hidden');
+    const btn = document.getElementById('toggle-controls-btn');
+    btn.textContent = document.getElementById('controls-panel-container').classList.contains('hidden') ? '◀' : '▶';
 }
-function toggleBackground(){
-  document.body.classList.toggle('bg-image');
-  document.body.classList.toggle('bg-gradient');
-  document.getElementById('toggle-bg-btn').textContent = document.body.classList.contains('bg-image') ? '💧 Show Gradient Background' : '🌈 Show Background Image';
+
+function toggleBackground() {
+    document.body.classList.toggle('bg-gradient');
+    document.body.classList.toggle('bg-image');
 }
 
 function handleQualityChange(newScale) {
     CURRENT_RENDER_SCALE = parseFloat(newScale);
-    resetPaper(); // Re-render all canvases with the new scale
+    // Force re-render of all boxes that contain images or PDFs
+    document.querySelectorAll('.box.filled-state').forEach(box => {
+        const divisionNumber = parseInt(box.id.split('-')[2]);
+        const entry = boxFileMap.get(divisionNumber);
+        if (entry) {
+            // Re-render the content at the new scale
+            renderFileInBox(box, entry).catch(err => console.error('Quality re-render failed:', err));
+        }
+    });
 }
 
 function updateSaveButtonText() {
     const saveQualitySelect = document.getElementById('save-quality-select');
     const selectedQualityScale = saveQualitySelect.value;
-    const optionText = saveQualitySelect.options[saveQualitySelect.selectedIndex].textContent;
-    const match = optionText.match(/\((.*?)\)/); // Extract scale from text
+    const saveBtn = document.getElementById('save-sheets-btn');
+    const match = saveQualitySelect.options[saveQualitySelect.selectedIndex].textContent.match(/\((.*?)\)/);
     const displayScale = match ? match[1] : `${selectedQualityScale}x`;
-    document.getElementById('save-sheets-btn').innerHTML = `💾 Start Save(${displayScale})`;
+    saveBtn.innerHTML = `💾 Start Save(${displayScale})`;
 }
 
 function attachLiveListeners() {
@@ -1545,9 +1702,10 @@ function attachLiveListeners() {
     document.getElementById('paper-size-select')?.addEventListener('change', e => handlePaperSizeChange(e.target.value));
     document.querySelectorAll('input[name="pageDivision"]').forEach(el => el.addEventListener('change', e => handleDivisionChange(e.target.value)));
     document.querySelectorAll('input[name="paperOrientation"]').forEach(el => el.addEventListener('change', e => handleOrientationChange(e.target.value)));
+    document.querySelectorAll('input[name="uploadMode"]').forEach(el => el.addEventListener('change', e => uploadMode = e.target.value));
+    
     document.getElementById('multi-upload-btn')?.addEventListener('click', () => document.getElementById('multi-file-input').click());
     document.getElementById('multi-file-input')?.addEventListener('change', e => handleMultiPhotoUpload(e.target.files));
-    document.querySelectorAll('#upload-mode-controls input[type="radio"]').forEach(r => r.addEventListener('change', e => uploadMode = e.target.value));
     document.getElementById('toggle-controls-btn')?.addEventListener('click', toggleControls);
     document.getElementById('toggle-bg-btn')?.addEventListener('click', toggleBackground);
     document.getElementById('togglePaperBtn')?.addEventListener('click', togglePaper);
@@ -1559,6 +1717,15 @@ function attachLiveListeners() {
 
 document.addEventListener('DOMContentLoaded', () => {
     attachLiveListeners();
+    
+    // Initial calculation based on default settings
+    marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
+    marginBottom = parseFloat(document.getElementById('margin-bottom').value) || 0;
+    marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
+    marginRight = parseFloat(document.getElementById('margin-right').value) || 0;
+    currentColGap = parseFloat(document.getElementById('col-gap-input').value) || 0;
+    currentRowGap = parseFloat(document.getElementById('row-gap-input').value) || 0;
+    
     calculateConstrainedBoxSize();
     
     // Manually set box size inputs to reflect the calculated full-page size based on A4/portrait/1x1/0 margins
@@ -1575,10 +1742,11 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSaveButtonText();
 
     // Create two pages by default (keeps your existing behavior)
-    createPage(0);
-    createPage(1);
+    currentPageIndex = 1;
+    createPage(currentPageIndex);
+    currentPageIndex = 2;
+    createPage(currentPageIndex);
 });
 </script>
 </body>
 </html>
-
